@@ -60,6 +60,30 @@ describe('Codex JSONL translator', () => {
     expect(cardState.contextWindow).toBe(400000);
   });
 
+  it('estimates API-equivalent cost for gpt-5.6-sol with cached input pricing', () => {
+    const state = createCodexTranslatorState({ model: 'gpt-5.6-sol', contextWindow: 258_400 });
+    const processor = new StreamProcessor('estimate this turn');
+    let cardState = processor.processMessage({ type: 'system' });
+
+    for (const message of translateCodexJsonEvent(
+      {
+        type: 'turn.completed',
+        usage: {
+          input_tokens: 100_000,
+          cached_input_tokens: 80_000,
+          output_tokens: 10_000,
+          total_tokens: 110_000,
+        },
+      },
+      state,
+    )) {
+      cardState = processor.processMessage(message);
+    }
+
+    // 20k uncached input × $5/M + 80k cached × $0.50/M + 10k output × $30/M.
+    expect(cardState.costUsd).toBeCloseTo(0.44, 8);
+  });
+
   it('uses Codex token_count last_token_usage for ctx instead of cumulative totals', () => {
     const events: CodexJsonEvent[] = [
       { type: 'thread.started', thread_id: 'codex-thread' },

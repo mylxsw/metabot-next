@@ -153,6 +153,26 @@ function updateTokenCount(payload: CodexPayload | undefined, state: CodexTransla
   }
 }
 
+function estimateCodexApiEquivalentCostUsd(
+  model: string | undefined,
+  usage: CodexUsage | undefined,
+): number | undefined {
+  if (!model || !usage) return undefined;
+  const normalizedModel = model.toLowerCase();
+  if (normalizedModel !== 'gpt-5.6-sol' && normalizedModel !== 'gpt-5.6') return undefined;
+
+  const inputTokens = Math.max(0, usage.input_tokens ?? 0);
+  const cachedInputTokens = Math.min(inputTokens, Math.max(0, usage.cached_input_tokens ?? 0));
+  const uncachedInputTokens = inputTokens - cachedInputTokens;
+  const outputTokens = Math.max(0, usage.output_tokens ?? 0);
+
+  return (
+    uncachedInputTokens * 5
+    + cachedInputTokens * 0.5
+    + outputTokens * 30
+  ) / 1_000_000;
+}
+
 function buildResultMessage(
   usage: CodexUsage | undefined,
   state: CodexTranslatorState,
@@ -167,6 +187,7 @@ function buildResultMessage(
     : reliableUsage?.input_tokens ?? 0;
   const contextWindow = state.contextWindow ?? 0;
   const reportedTokens = inputTokens + outputTokens;
+  const estimatedCostUsd = estimateCodexApiEquivalentCostUsd(state.model, reliableUsage);
   // Codex turn.completed usage can be cumulative across the whole resumed
   // thread. If we did not see a token_count.last_token_usage event and the
   // reported total is larger than the model window, it is not a valid ctx
@@ -178,7 +199,7 @@ function buildResultMessage(
           inputTokens: usageLooksCumulative ? 0 : inputTokens,
           outputTokens: usageLooksCumulative ? 0 : outputTokens,
           contextWindow: usageLooksCumulative ? 0 : contextWindow,
-          costUSD: 0,
+          costUSD: estimatedCostUsd ?? 0,
         },
       }
     : undefined;
@@ -188,6 +209,7 @@ function buildResultMessage(
     subtype: isError ? 'error_during_execution' : 'success',
     session_id: state.sessionId,
     duration_ms: Date.now() - state.startTime,
+    total_cost_usd: estimatedCostUsd,
     result: state.lastAgentText,
     is_error: isError,
     errors: isError ? [errorMessage || 'Codex execution failed'] : undefined,

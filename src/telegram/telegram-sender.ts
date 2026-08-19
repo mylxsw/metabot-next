@@ -32,7 +32,7 @@ const STATUS_LABEL: Record<CardStatus, string> = {
  * Renders a CardState into an HTML string for Telegram.
  * Telegram supports a subset of HTML: <b>, <i>, <code>, <pre>, <a>.
  */
-function renderCardHtml(state: CardState): string {
+export function renderCardHtml(state: CardState): string {
   const parts: string[] = [];
 
   // Header
@@ -99,6 +99,12 @@ function renderCardHtml(state: CardState): string {
       statParts.push(`ctx: ${tokensK}/${ctxK} (${pct}%)`);
     }
     if (state.status === 'complete' || state.status === 'error') {
+      if (state.costUsd != null) {
+        statParts.push(`API est: $${state.costUsd.toFixed(4)}`);
+      }
+      if (state.sessionCostUsd != null) {
+        statParts.push(`session est: $${state.sessionCostUsd.toFixed(4)}`);
+      }
       if (state.model) {
         statParts.push(state.model.replace(/^claude-/, ''));
       }
