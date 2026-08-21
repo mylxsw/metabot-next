@@ -96,7 +96,17 @@ export function createHookBridge(options?: HookBridgeOptions): PtyHookBridge {
       ];
     }
 
-    const settings = { hooks };
+    // MetaBot intentionally launches Claude Code in unattended bypass mode.
+    // Interactive Claude otherwise shows a first-run responsibility dialog
+    // whose default choice is "No, exit". The PTY driver sees that dialog's
+    // `❯` marker as an input box, types the user's prompt into the menu, and
+    // Claude exits before the turn starts. The operator has explicitly opted
+    // into bypass mode, so suppress that one-time interactive confirmation in
+    // the per-session settings passed via --settings.
+    const settings = {
+      skipDangerousModePermissionPrompt: true,
+      hooks,
+    };
 
     writeFileSync(settingsPath, JSON.stringify(settings, null, 2), 'utf8');
     return settingsPath;

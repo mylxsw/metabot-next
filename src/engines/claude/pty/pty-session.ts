@@ -244,9 +244,15 @@ class PtyClaudeSessionImpl implements IPtyClaudeSession {
     }
 
     await sleep(800);
+    if (!this.term || this.disposed) {
+      throw new Error('pty-session: cannot submit — claude process exited while typing');
+    }
     this.term.write('\r');
     await sleep(1500);
     // Double-Enter safeguard: the TUI sometimes needs a second Enter to submit.
+    if (!this.term || this.disposed) {
+      throw new Error('pty-session: cannot resubmit — claude process exited after Enter');
+    }
     this.term.write('\r');
   }
 
