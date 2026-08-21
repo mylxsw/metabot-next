@@ -2,7 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { KimiDaemonClient, KimiDaemonError } from '../src/engines/kimi/daemon-client.js';
+import {
+  buildKimiServerArgs,
+  KimiDaemonClient,
+  KimiDaemonError,
+} from '../src/engines/kimi/daemon-client.js';
 
 function response<T>(data: T): Response {
   return new Response(JSON.stringify({ code: 0, msg: 'success', data, request_id: 'req-test' }), {
@@ -27,6 +31,10 @@ describe('KimiDaemonClient', () => {
     if (previousHome === undefined) delete process.env.KIMI_CODE_HOME;
     else process.env.KIMI_CODE_HOME = previousHome;
     await rm(home, { recursive: true, force: true });
+  });
+
+  it('starts current Kimi Code releases through the foreground web server command', () => {
+    expect(buildKimiServerArgs('58627')).toEqual(['web', '--port', '58627', '--no-open']);
   });
 
   it('uses the official prompt queue and steer endpoints', async () => {
