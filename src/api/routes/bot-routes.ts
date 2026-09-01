@@ -185,6 +185,8 @@ export async function handleBotRoutes(
         ...(body.codex ? { codex: body.codex } : {}),
         ...(body.kimi ? { kimi: body.kimi } : {}),
         telegramBotToken: token,
+        ...(body.groupNoMention ? { groupNoMention: true } : {}),
+        ...(Array.isArray(body.allowedUserIds) ? { allowedUserIds: body.allowedUserIds.map(String) } : {}),
         defaultWorkingDirectory: workDir,
         ...(body.maxTurns ? { maxTurns: body.maxTurns } : {}),
         ...(body.maxBudgetUsd ? { maxBudgetUsd: body.maxBudgetUsd } : {}),

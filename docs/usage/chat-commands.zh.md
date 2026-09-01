@@ -15,6 +15,7 @@
 | `/sync` | 触发 MetaMemory → 飞书知识库同步 |
 | `/sync status` | 查看知识库同步统计 |
 | `@Bot /group-reply mention\|all\|status` | 查看或修改飞书群中当前 Bot 的回复模式 |
+| `/group_reply@Bot mention\|all\|status` | 查看或修改 Telegram 群中当前 Bot 的回复模式 |
 | `/help` | 显示可用命令 |
 | `/metaskill ...` | 生成 Agent 团队、Agent 或 Skill |
 | `/metabot` | 加载 Agent 总线文档（调度、Bot 管理、跨实例对话） |
@@ -65,6 +66,14 @@ Bot 的 `groupNoMention` 配置和“两人群视为私聊”的默认规则。�
 
 !!! tip "推荐：建两人群"
     建一个只有你和 Bot 的两人群聊。无需 @Bot 即可对话，还能享受群聊功能（置顶、分类管理等）。
+
+## Telegram 群聊行为
+
+- 两人群默认使用 `all`，无需 @Bot；成员数量缓存 5 分钟。
+- 多人群默认使用 `mention`；群管理员可用 `/group_reply@Bot all|mention|status` 覆盖。
+- `bots.json` 的 `groupNoMention: true` 可让多人群默认回复全部消息。
+- `allowedUserIds` 会在文字、图片、文件、视频、音频和语音进入 Agent 前统一校验。
+- 若 Bot 不是群管理员，请在 BotFather 使用 `/setprivacy` 关闭隐私模式，否则 Telegram 不会投递未 @ 的消息。
 
 ### 在群聊中发送文件和图片
 

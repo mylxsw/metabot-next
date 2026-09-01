@@ -37,6 +37,8 @@ Set `BOTS_CONFIG=./bots.json` in `.env`:
       "name": "personal-codex",
       "engine": "codex",
       "telegramBotToken": "123456:ABC...",
+      "allowedUserIds": ["123456789"],
+      "groupNoMention": false,
       "defaultWorkingDirectory": "/home/me/personal"
     }
   ],
@@ -70,7 +72,7 @@ Channel-specific credentials:
 | Channel     | Fields                                                                                      |
 | ----------- | ------------------------------------------------------------------------------------------- |
 | Feishu/Lark | `feishuAppId`, `feishuAppSecret`, optional `groupNoMention`                                 |
-| Telegram    | `telegramBotToken`                                                                          |
+| Telegram    | `telegramBotToken`, optional `allowedUserIds`, optional `groupNoMention`                    |
 | WeChat      | optional `wechatBotToken`; omit it for QR login                                             |
 | Slack       | `slackBotToken`, `slackSigningSecret`, optional `slackBotUserId`, optional `groupNoMention` |
 
@@ -144,6 +146,7 @@ personal-edition bots default to Codex when `engine` is omitted.
 ## Runtime Behavior
 
 - Each bot owns an independent channel connection and workspace.
+- Telegram two-member groups default to DM-like routing; an explicit group mode or `groupNoMention` overrides it.
 - Sessions are isolated per bot and `chatId`.
 - A chat can switch engine/model with `/model`; this does not rename the bot.
 - Feishu reply modes persist per bot and group.

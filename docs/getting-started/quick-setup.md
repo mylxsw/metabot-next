@@ -10,10 +10,15 @@
   "telegramBots": [{
     "name": "my-tg-bot",
     "telegramBotToken": "123456:ABC...",
+    "allowedUserIds": ["your numeric Telegram user ID"],
     "defaultWorkingDirectory": "/home/user/project"
   }]
 }
 ```
+
+Two-member groups (you + the bot) reply without @mention by default; larger groups remain mention-only.
+Always set `allowedUserIds` when the bot can operate on your computer. If the bot is not a group
+administrator, disable group privacy with BotFather `/setprivacy` so Telegram delivers unmentioned messages.
 
 ## Feishu/Lark (4 steps)
 

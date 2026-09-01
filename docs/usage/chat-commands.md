@@ -15,6 +15,7 @@ Commands you can send to MetaBot in Feishu or Telegram.
 | `/sync` | Trigger MetaMemory → Feishu Wiki sync |
 | `/sync status` | Show wiki sync statistics |
 | `@Bot /group-reply mention\|all\|status` | View or change this Feishu group's reply mode for the addressed bot |
+| `/group_reply@Bot mention\|all\|status` | View or change this Telegram group's reply mode for the addressed bot |
 | `/help` | Show available commands |
 | `/metaskill ...` | Generate agent teams, agents, or skills |
 | `/metabot` | Load Agent Bus docs (scheduling, bot management, cross-instance talk) |
@@ -69,6 +70,14 @@ to that bot without @mentioning it.
 
 !!! tip "Recommended: 2-person group"
     Create a group with just you and the bot. You get DM-like convenience (no @mention) with group features like pinning and categorization.
+
+## Telegram Group Behavior
+
+- Two-member groups default to `all`; member counts are cached for five minutes.
+- Larger groups default to `mention`; group administrators can override with `/group_reply@Bot all|mention|status`.
+- `groupNoMention: true` makes larger groups route every message by default.
+- `allowedUserIds` is enforced before text, image, file, video, audio, voice, or animation messages enter the Agent.
+- If the bot is not a group administrator, disable privacy with BotFather `/setprivacy` or Telegram will not deliver unmentioned messages.
 
 ### Sending Files & Images in Groups
 

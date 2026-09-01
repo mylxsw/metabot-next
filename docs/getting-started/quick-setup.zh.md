@@ -10,10 +10,15 @@
   "telegramBots": [{
     "name": "my-tg-bot",
     "telegramBotToken": "123456:ABC...",
+    "allowedUserIds": ["你的 Telegram 数字用户 ID"],
     "defaultWorkingDirectory": "/home/user/project"
   }]
 }
 ```
+
+两人群（你 + Bot）默认无需 @；多人群默认只有 @Bot 或命令才会触发。建议始终设置
+`allowedUserIds`，避免其他 Telegram 用户调用本机 Agent。若 Bot 不是群管理员，还需在
+BotFather 使用 `/setprivacy` 关闭群隐私模式，Telegram 才会投递未 @ 的普通群消息。
 
 ## 飞书（4 步）
 

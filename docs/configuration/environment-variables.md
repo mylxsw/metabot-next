@@ -55,6 +55,8 @@ settings in `bots.json`. See [Multi-Bot and Engines](multi-bot.md).
 | `FEISHU_APP_ID`                          | —       | Single-bot Feishu/Lark App ID                                   |
 | `FEISHU_APP_SECRET`                      | —       | Single-bot Feishu/Lark App Secret                               |
 | `TELEGRAM_BOT_TOKEN`                     | —       | Single-bot Telegram token                                       |
+| `TELEGRAM_ALLOWED_USER_IDS`               | —       | Comma-separated Telegram user ID allowlist                       |
+| `TELEGRAM_GROUP_NO_MENTION`               | `false` | Route every message in larger Telegram groups without @mention   |
 | `SLACK_BOT_TOKEN`                        | —       | Single-bot Slack bot token (`xoxb-...`)                         |
 | `SLACK_SIGNING_SECRET`                   | —       | Single-bot Slack Events API signing secret                      |
 | `SLACK_BOT_USER_ID`                      | auto    | Optional Slack bot user ID when startup cannot call `auth.test` |

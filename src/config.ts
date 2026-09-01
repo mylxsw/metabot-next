@@ -198,6 +198,10 @@ export interface TelegramBotConfig extends BotConfigBase {
   telegram: {
     botToken: string;
   };
+  /** When true, respond to all messages in group chats without requiring @mention. */
+  groupNoMention?: boolean;
+  /** Optional Telegram user ID allowlist. When set, every other sender is ignored. */
+  allowedUserIds?: string[];
 }
 
 /** WeChat bot config (extends base with iLink credentials). */
@@ -384,6 +388,10 @@ export interface TelegramBotJsonEntry extends EngineJsonFields {
   visible?: boolean;
   /** See BotConfigBase.memoryPublic — defaults to true if omitted. */
   memoryPublic?: boolean;
+  /** Respond to every group message instead of requiring @mention in groups with more than two members. */
+  groupNoMention?: boolean;
+  /** Telegram numeric user IDs allowed to use this bot. Omit to allow every sender. */
+  allowedUserIds?: string[];
   telegramBotToken: string;
   defaultWorkingDirectory: string;
   maxTurns?: number;
@@ -407,6 +415,8 @@ function telegramBotFromJson(entry: TelegramBotJsonEntry): TelegramBotConfig {
     ...(entry.voiceReply ? { voiceReply: entry.voiceReply } : {}),
     ...(entry.visible !== undefined ? { visible: entry.visible } : {}),
     ...(entry.memoryPublic !== undefined ? { memoryPublic: entry.memoryPublic } : {}),
+    ...(entry.groupNoMention ? { groupNoMention: true } : {}),
+    ...(entry.allowedUserIds?.length ? { allowedUserIds: entry.allowedUserIds.map(String) } : {}),
     ...(entry.engine ? { engine: entry.engine } : {}),
     ...(entry.kimi ? { kimi: entry.kimi } : {}),
     ...(codex ? { codex } : {}),
@@ -641,6 +651,10 @@ function feishuBotFromEnv(): BotConfig {
 
 function telegramBotFromEnv(): TelegramBotConfig {
   const codex = buildCodexConfig();
+  const allowedUserIds = (process.env.TELEGRAM_ALLOWED_USER_IDS || '')
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean);
   return {
     name: 'telegram-default',
     ...(process.env.METABOT_ENGINE ? { engine: process.env.METABOT_ENGINE as EngineName } : {}),
@@ -648,6 +662,8 @@ function telegramBotFromEnv(): TelegramBotConfig {
     telegram: {
       botToken: required('TELEGRAM_BOT_TOKEN'),
     },
+    ...(process.env.TELEGRAM_GROUP_NO_MENTION === 'true' ? { groupNoMention: true } : {}),
+    ...(allowedUserIds.length > 0 ? { allowedUserIds } : {}),
     claude: {
       defaultWorkingDirectory: expandUserPath(required('CLAUDE_DEFAULT_WORKING_DIRECTORY')),
       maxTurns: process.env.CLAUDE_MAX_TURNS ? parseInt(process.env.CLAUDE_MAX_TURNS, 10) : undefined,

@@ -53,6 +53,8 @@ MetaMemory 变量和 `8100` 端口不属于当前个人版。
 | `FEISHU_APP_ID`                          | —       | 单 Bot 飞书/Lark App ID                                   |
 | `FEISHU_APP_SECRET`                      | —       | 单 Bot 飞书/Lark App Secret                               |
 | `TELEGRAM_BOT_TOKEN`                     | —       | 单 Bot Telegram Token                                     |
+| `TELEGRAM_ALLOWED_USER_IDS`               | —       | 单 Bot Telegram 用户 ID 白名单，逗号分隔                   |
+| `TELEGRAM_GROUP_NO_MENTION`               | `false` | 多人群是否无需 @Bot 即路由全部消息                         |
 | `SLACK_BOT_TOKEN`                        | —       | 单 Bot Slack Bot Token（`xoxb-...`）                      |
 | `SLACK_SIGNING_SECRET`                   | —       | 单 Bot Slack Events API Signing Secret                    |
 | `SLACK_BOT_USER_ID`                      | 自动    | 启动时无法调用 `auth.test` 时可显式设置 Slack Bot 用户 ID |

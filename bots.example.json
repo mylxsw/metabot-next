@@ -55,6 +55,8 @@
       "name": "tg-project",
       "description": "General purpose project assistant via Telegram",
       "telegramBotToken": "123456:ABC-DEF...",
+      "allowedUserIds": ["123456789"],
+      "groupNoMention": false,
       "defaultWorkingDirectory": "/home/user/project"
     }
   ],

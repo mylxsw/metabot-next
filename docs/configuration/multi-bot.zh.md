@@ -36,6 +36,8 @@
       "name": "personal-codex",
       "engine": "codex",
       "telegramBotToken": "123456:ABC...",
+      "allowedUserIds": ["123456789"],
+      "groupNoMention": false,
       "defaultWorkingDirectory": "/home/me/personal"
     }
   ],
@@ -69,7 +71,7 @@
 | 渠道      | 字段                                                                           |
 | --------- | ------------------------------------------------------------------------------ |
 | 飞书/Lark | `feishuAppId`、`feishuAppSecret`，可选 `groupNoMention`                        |
-| Telegram  | `telegramBotToken`                                                             |
+| Telegram  | `telegramBotToken`，可选 `allowedUserIds`、`groupNoMention`                     |
 | 微信      | 可选 `wechatBotToken`；省略时扫码登录                                          |
 | Slack     | `slackBotToken`、`slackSigningSecret`，可选 `slackBotUserId`、`groupNoMention` |
 
@@ -141,6 +143,7 @@ MetaBot 使用与 Kimi Web 前端同源的官方本地 Server API，支持持久
 ## 运行行为
 
 - 每个 Bot 拥有独立渠道连接和工作区。
+- Telegram 两人群默认视为私聊；显式群模式与 `groupNoMention` 可覆盖默认行为。
 - 会话按 Bot 和 `chatId` 隔离。
 - Chat 可以使用 `/model` 切换引擎/模型，不会改变 Bot 身份。
 - 飞书群回复模式按 Bot 和群持久化。

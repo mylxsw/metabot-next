@@ -458,6 +458,7 @@ async function main() {
     for (const handle of telegramHandles) {
       teardowns.push(handle.bridge.destroyAsync());
       handle.bot.stop();
+      handle.destroy();
     }
     for (const handle of wechatHandles) {
       teardowns.push(handle.bridge.destroyAsync());
