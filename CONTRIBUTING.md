@@ -19,7 +19,11 @@ cp .env.example .env
 # 4. Build
 npm run build
 
-# 5. Run in development
+# 5. Run the test suite and lint checks
+npm test
+npm run lint
+
+# 6. Run in development
 npm run dev
 ```
 
@@ -59,7 +63,8 @@ packages/        # Personal Core, Web UI, CLI, and shared packages
 1. Fork the repo and create a branch from `main`
 2. Make your changes with clear commit messages
 3. Ensure `npm run build` passes with no errors
-4. Open a PR with a clear description of what changed and why
+4. Run `npm test` and `npm run lint`
+5. Open a PR with a clear description of what changed and why
 
 ## Code Style
 
@@ -67,6 +72,7 @@ packages/        # Personal Core, Web UI, CLI, and shared packages
 - Use `async/await` over raw promises
 - Keep functions small and focused
 - Add JSDoc comments for public APIs
+- Use ESM imports with `.js` extensions
 
 ## Questions?
 

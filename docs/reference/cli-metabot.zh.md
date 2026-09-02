@@ -86,8 +86,17 @@ metabot talk alice/bot <chatId> <prompt>  # 指定 peer 的 Bot 对话
 ```
 
 Bot 名称支持[限定名](../features/peers.md#qualified-names)（`peerName/botName`）实现跨实例
-路由。这是 bridge 本地的对话路径；`metabot agents talk` 是基于中心注册表的 P2P
-变体。
+路由。这是 bridge 本地的对话路径。需要通过 Personal Core 持久化发送 Agent Bus 消息时，使用：
+
+```bash
+metabot send <agentId> "prompt"
+metabot send <agentId> "prompt" --session <sessionId> --idempotency-key <key>
+metabot send <agentId> "后台任务" --implicit
+```
+
+Core 会持久化消息和逻辑运行、解析目标会话，并返回 `messageId`、`sessionId`、`runId`。
+在飞书来源会话中，可用 `--origin-chat <oc_...> --origin-bot <name>` 将运行事件投影回来源
+Bot；`--child-direct` 则让结果显示在目标 Agent 会话。
 
 ### Peers
 

@@ -547,8 +547,13 @@ export class MemoryStore {
     return result.changes > 0;
   }
 
-  searchDocuments(query: string, limit: number, cred: Credential): SearchResult[] {
+  /** Search ranked documents, optionally skipping a page of results. */
+  searchDocuments(query: string, limit: number, cred: Credential, offset = 0): SearchResult[] {
     const escaped = escapeFts5Query(query);
+    const pageSize = Math.min(Math.max(limit, 1), 100);
+    const pageOffset = Math.max(Math.floor(offset) || 0, 0);
+    // Fetch the complete requested window before ACL filtering so a private
+    // document does not consume a visible result slot.
     const rows = this.db.prepare(`
       SELECT d.id, d.title, d.path, d.content_type, d.tags, d.shared, d.created_by, d.updated_at,
              snippet(documents_fts, 1, '<mark>', '</mark>', '...', 32) as snippet
@@ -557,10 +562,11 @@ export class MemoryStore {
       WHERE documents_fts MATCH ?
       ORDER BY rank
       LIMIT ?
-    `).all(escaped, Math.min(Math.max(limit, 1), 100)) as RawSearchRow[];
+    `).all(escaped, Math.min(pageOffset + pageSize, 1000)) as RawSearchRow[];
 
     return rows
       .filter((r) => canReadDoc(cred, r.path, r.shared === 1))
+      .slice(pageOffset, pageOffset + pageSize)
       .map((r) => ({
         id: r.id, title: r.title, path: r.path,
         content_type: normalizeStoredContentType(r.content_type),

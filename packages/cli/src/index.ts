@@ -8,7 +8,7 @@
  *   metabot memory <…>   → @xvirobotics/metamemory  (former `mm`)
  *   metabot skills <…>   → @xvirobotics/skill-hub   (former `mh`)
  *   metabot agents <…>   → in-tree (./agents.js)
- *   metabot inbox <…>    → in-tree (./inbox.js); wraps /api/inbox/*
+ *   metabot send <…>     → in-tree (./send.js); wraps /api/messages/*
  *   metabot teams <…>    → in-tree (./teams.js); wraps local bridge /api/agent-teams/*
  *   metabot t5t <…>      → in-tree (./t5t.js); wraps /api/t5t/cli/*
  *   metabot help         → top-level help (also: bare invocation, --help, -h)
@@ -41,8 +41,8 @@ export async function main(argv: string[]): Promise<void> {
       await m.run(rest);
       return;
     }
-    case 'inbox': {
-      const m = await import('./inbox.js');
+    case 'send': {
+      const m = await import('./send.js');
       await m.run(rest);
       return;
     }
@@ -57,9 +57,7 @@ export async function main(argv: string[]): Promise<void> {
       return;
     }
     default: {
-      process.stderr.write(`metabot: unknown subcommand '${sub}'\n\n`);
-      const { print } = await import('./help.js');
-      print();
+      process.stderr.write(`metabot: unknown subcommand '${sub}'. Run 'metabot --help' for usage.\n`);
       process.exit(2);
     }
   }

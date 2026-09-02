@@ -23,12 +23,67 @@ const FALLBACK_CODEX_CONTEXT_WINDOW = 272000;
 const CODEX_AUTH_ENV_VARS = ['OPENAI_API_KEY', 'CODEX_API_KEY', 'CODEX_ACCESS_TOKEN'];
 const CODEX_EXIT_GRACE_MS = 1000;
 
+function findWindowsCodexBinary(npmPrefix: string | undefined): string | undefined {
+  if (!npmPrefix) return undefined;
+
+  const target = process.arch === 'arm64'
+    ? { packageName: 'codex-win32-arm64', triple: 'aarch64-pc-windows-msvc' }
+    : { packageName: 'codex-win32-x64', triple: 'x86_64-pc-windows-msvc' };
+  const candidate = path.join(
+    npmPrefix,
+    'node_modules',
+    '@openai',
+    'codex',
+    'node_modules',
+    '@openai',
+    target.packageName,
+    'vendor',
+    target.triple,
+    'bin',
+    'codex.exe',
+  );
+  return existsSync(candidate) ? candidate : undefined;
+}
+
+export function buildCodexSpawnCommand(
+  executable: string,
+  args: string[],
+  platform: NodeJS.Platform = process.platform,
+): { command: string; args: string[] } {
+  if (platform !== 'win32') return { command: executable, args };
+
+  if (path.basename(executable).toLowerCase() === 'codex.cmd') {
+    const codexScript = path.join(
+      path.dirname(executable),
+      'node_modules',
+      '@openai',
+      'codex',
+      'bin',
+      'codex.js',
+    );
+    if (existsSync(codexScript)) {
+      return { command: process.execPath, args: [codexScript, ...args] };
+    }
+    throw new Error(`Unable to resolve Codex npm entrypoint for ${executable}`);
+  }
+
+  if (/\.(?:cmd|bat)$/i.test(executable)) {
+    throw new Error(`Codex executable must be a native executable on Windows: ${executable}`);
+  }
+  return { command: executable, args };
+}
+
 export function resolveCodexPath(explicitPath?: string): string {
   const override = explicitPath || process.env.CODEX_EXECUTABLE_PATH;
   if (override && existsSync(override)) return override;
 
   try {
-    const cmd = isWindows ? 'where codex' : 'which codex';
+    if (isWindows) {
+      const npmPrefix = process.env.APPDATA ? path.join(process.env.APPDATA, 'npm') : undefined;
+      const nativeBinary = findWindowsCodexBinary(npmPrefix);
+      if (nativeBinary) return nativeBinary;
+    }
+    const cmd = isWindows ? 'where codex.cmd' : 'which codex';
     return execSync(cmd, { encoding: 'utf-8' }).trim().split(/\r?\n/)[0];
   } catch {
     if (!isWindows) {
@@ -392,10 +447,12 @@ export class CodexExecutor {
     };
 
     try {
-      child = spawn(executable, args, {
+      const spawnCommand = buildCodexSpawnCommand(executable, args);
+      child = spawn(spawnCommand.command, spawnCommand.args, {
         cwd,
         env: buildCodexEnv(codexConfig),
         stdio: ['ignore', 'pipe', 'pipe'],
+        windowsHide: true,
       });
     } catch (err: any) {
       finishWithError(err?.message || String(err));

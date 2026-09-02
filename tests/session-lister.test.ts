@@ -52,6 +52,17 @@ describe('claudeProjectsDir', () => {
     const dir = claudeProjectsDir('/a/b/c', '/home/u');
     expect(dir).toBe(path.join('/home/u', '.claude', 'projects', '-a-b-c'));
   });
+  it('escapes underscores and dots to dashes (matches claude itself)', () => {
+    // Verified against live ~/.claude/projects (Claude Code 2.1.x):
+    // /Users/garfield/openclaw_workspace → -Users-garfield-openclaw-workspace
+    expect(claudeProjectsDir('/u/openclaw_workspace', '/home/u')).toBe(
+      path.join('/home/u', '.claude', 'projects', '-u-openclaw-workspace'),
+    );
+    // /Users/garfield/.openclaw → -Users-garfield--openclaw
+    expect(claudeProjectsDir('/Users/garfield/.openclaw', '/home/u')).toBe(
+      path.join('/home/u', '.claude', 'projects', '-Users-garfield--openclaw'),
+    );
+  });
   it('resolves relative cwd before escaping', () => {
     const dir = claudeProjectsDir('.', '/home/u');
     expect(dir.startsWith(path.join('/home/u', '.claude', 'projects', '-'))).toBe(true);

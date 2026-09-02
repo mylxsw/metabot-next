@@ -4,27 +4,28 @@ export function print(): void {
 
 Usage: metabot <subcommand> [args]
 
-Subcommands:
+Primary subcommands:
   memory <cmd> [args]   shared knowledge / notes
                         e.g. metabot memory search "auth" | metabot memory health
   skills <cmd> [args]   skill registry (alias: skill)
                         e.g. metabot skills list | metabot skills install <name>
-  agents <cmd> [args]   agent registry (address book for peer bots)
-                        e.g. metabot agents list | metabot agents talk <peer>/<bot> <chatId> "<msg>"
-  inbox <cmd> [args]    central inbox for CLI agents (no resident bridge needed)
-                        e.g. metabot inbox register | metabot inbox poll --loop
-  teams <cmd> [args]    MetaBot Agent Teams (local bridge)
-                        e.g. metabot teams dispatch demo worker "review PR" | metabot teams next demo worker
+  send <agentId> "message"  minimal point-to-point Agent Bus send
+                             in Feishu context, proxy progress to origin chat
+                             optional: --session <sessionId> | --implicit
+                                       --origin-chat <oc_...> --origin-bot <name>
+                                       --child-direct
   t5t <cmd> [args]      daily team status portal (board / projects / entries)
                         e.g. metabot t5t board | metabot t5t push <slug> <date> "<item>"
   help                  this message (also --help, -h, or bare invocation)
 
+Use metabot send for all point-to-point Agent Bus communication. The old
+chat/inbox/agents-talk CLI surfaces are no longer shipped; server fallback
+routes remain internal compatibility plumbing only.
+
 Each subcommand has its own help; pass --help through to see it:
   metabot memory --help
   metabot skills --help
-  metabot agents --help
-  metabot inbox --help
-  metabot teams --help
+  metabot send --help
   metabot t5t --help
 
 Env:

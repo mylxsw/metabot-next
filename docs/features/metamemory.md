@@ -15,6 +15,7 @@ explicit per-document choice.
 
 ```bash
 metabot memory search "deployment guide"
+metabot memory search "deployment guide" --limit 20 --offset 20
 metabot memory list
 metabot memory get <document-id>
 metabot memory path /users/me/project/guide
@@ -30,6 +31,10 @@ metabot memory health
 `create` and `update` read content from standard input when the content argument
 is omitted. Use `--html` only for a complete HTML document; Markdown is the
 default.
+
+Search results are ranked and capped at 100 per request. Use `--offset` with
+`--limit` to retrieve later pages. The Core Console search page exposes the
+same paging through its **load more** control.
 
 ## Paths and sharing
 

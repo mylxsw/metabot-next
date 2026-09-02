@@ -193,6 +193,12 @@ Skills、T5T、Teams 和 CLI Access 共用同一 Token 与同一套导航。
 | `@Bot /group-reply mention\|all\|status`       | 控制一个飞书 Bot 在一个群里的回复模式            |
 | `metabot update`                               | 将 Package 管理的个人版升级到最新 GitHub Release |
 | `metabot update --package --version 1.3.0`     | 精确安装不可变的 v1.3.0 Release 包               |
+| `metabot send <agentId> "消息"`                | 通过 Personal Core 发送持久化 Agent Bus 消息       |
+
+Agent Bus 消息可绑定稳定会话并安全重试：使用 `--session <sessionId>` 指定会话，
+`--idempotency-key <key>` 去重重试，`--implicit` 隐藏运行卡片。Core 默认地址为
+`http://localhost:9200`，通过 `METABOT_CORE_URL` 和 `METABOT_CORE_TOKEN` 配置远端
+Personal Core；不会依赖托管服务或内部身份系统。
 
 完整命令详见[聊天命令](docs/usage/chat-commands.zh.md)、[CLI 参考](docs/reference/cli-metabot.zh.md)和 [REST API](docs/reference/api.zh.md)。
 

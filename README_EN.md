@@ -197,6 +197,13 @@ Each bot has its own channel credentials, engine, workspace, and sessions. Bots 
 | `@Bot /group-reply mention\|all\|status`       | Control one Feishu bot's reply mode in one group                       |
 | `metabot update`                               | Update a package-managed personal edition to the latest GitHub Release |
 | `metabot update --package --version 1.3.0`     | Install exactly the immutable v1.3.0 Release package                   |
+| `metabot send <agentId> "message"`             | Send a durable Agent Bus message through Personal Core                  |
+
+Agent Bus messages can target a stable session and be retried safely: use
+`--session <sessionId>` for an exact session, `--idempotency-key <key>` to
+deduplicate retries, and `--implicit` to hide run presentation. Personal Core
+defaults to `http://localhost:9200`; configure a remote self-hosted Core with
+`METABOT_CORE_URL` and `METABOT_CORE_TOKEN`.
 
 See [Chat Commands](docs/usage/chat-commands.md), the [CLI Reference](docs/reference/cli-metabot.md), and the [REST API](docs/reference/api.md) for the complete surfaces.
 

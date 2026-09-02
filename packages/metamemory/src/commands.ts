@@ -142,9 +142,10 @@ export async function cmdSearch(cfg: Config, args: ParsedArgs): Promise<void> {
   const q = args.positional[0];
   if (!q) throw new Error('search: <query> required');
   const limit = typeof args.flags.limit === 'string' ? args.flags.limit : '20';
+  const offset = typeof args.flags.offset === 'string' ? args.flags.offset : undefined;
   const body = await request(cfg, {
     path: '/api/memory/search',
-    query: { q, limit },
+    query: { q, limit, offset },
   });
   print(body);
 }
@@ -351,7 +352,7 @@ export function printHelp(): void {
 Usage: metabot memory <command> [args]
 
 Commands:
-  search <query>              [--limit N]
+  search <query>              [--limit N] [--offset N]
   get <doc_id>
   path </abs/path/to/doc>
   list [folder_id]            [--limit N] [--offset N]

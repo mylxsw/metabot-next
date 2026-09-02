@@ -11,6 +11,11 @@ import { SkillStore } from './skills/skill-store.js';
 import { AgentStore } from './agents/agent-store.js';
 import { InboxStore } from './agents/inbox-store.js';
 import { ChatStore } from './chat/chat-store.js';
+import type { ChatRun, ChatRunEvent, ChatRunPresentation } from './chat/chat-types.js';
+import { ChatEventHub } from './chat/chat-events.js';
+import { BusEventHub } from './bus/event-hub.js';
+import * as messageRoutes from './bus/message-routes.js';
+import { MessageStore } from './bus/message-store.js';
 import { T5tStore } from './t5t/t5t-store.js';
 import { loadT5tFolderIds } from './t5t/folder-ids.js';
 import { AuditLog, createDefaultAuditLog, type AuditOp } from './observability/audit-log.js';
@@ -59,6 +64,7 @@ export interface ServerHandle {
   skillStore: SkillStore;
   agentStore: AgentStore;
   inboxStore: InboxStore;
+  messageStore: MessageStore;
   chatStore: ChatStore;
   t5tStore: T5tStore;
   auditLog: AuditLog;
@@ -94,7 +100,10 @@ function readBody(req: http.IncomingMessage): Promise<string> {
     req.on('data', (chunk: Buffer) => {
       if (tooLarge) return;
       total += chunk.length;
-      if (total > MAX_BODY_SIZE) { tooLarge = true; return; }
+      if (total > MAX_BODY_SIZE) {
+        tooLarge = true;
+        return;
+      }
       chunks.push(chunk);
     });
     req.on('end', () => {
@@ -113,7 +122,10 @@ function readRawBody(req: http.IncomingMessage): Promise<Buffer> {
     req.on('data', (chunk: Buffer) => {
       if (tooLarge) return;
       total += chunk.length;
-      if (total > MAX_BODY_SIZE) { tooLarge = true; return; }
+      if (total > MAX_BODY_SIZE) {
+        tooLarge = true;
+        return;
+      }
       chunks.push(chunk);
     });
     req.on('end', () => {
@@ -173,9 +185,7 @@ function serveStaticFile(
 
   const ext = path.extname(absPath).toLowerCase();
   const mime = STATIC_MIME[ext] || 'application/octet-stream';
-  const cacheControl = isImmutableAsset
-    ? 'public, max-age=31536000, immutable'
-    : 'no-cache';
+  const cacheControl = isImmutableAsset ? 'public, max-age=31536000, immutable' : 'no-cache';
   res.writeHead(200, {
     'Content-Type': mime,
     'Content-Length': stat.size,
@@ -196,10 +206,7 @@ function serveStaticFile(
  * should treat this as "no UI configured / not eligible" and continue with
  * normal API routing.
  */
-function tryServeStatic(
-  res: http.ServerResponse,
-  pathname: string,
-): boolean {
+function tryServeStatic(res: http.ServerResponse, pathname: string): boolean {
   if (hasTraversal(pathname)) {
     jsonResponse(res, 400, { error: 'bad_path' });
     return true;
@@ -222,8 +229,10 @@ function tryServeStatic(
   const cliRoot = path.join(STATIC_DIR, 'cli');
   const installRoot = path.join(STATIC_DIR, 'install');
   if (
-    resolved === cliRoot || resolved.startsWith(cliRoot + path.sep)
-    || resolved === installRoot || resolved.startsWith(installRoot + path.sep)
+    resolved === cliRoot ||
+    resolved.startsWith(cliRoot + path.sep) ||
+    resolved === installRoot ||
+    resolved.startsWith(installRoot + path.sep)
   ) {
     jsonResponse(res, 404, { error: 'not_found' });
     return true;
@@ -257,6 +266,7 @@ async function deliverChatRunToAgent(
     prompt: string;
     engine?: string | null;
     model?: string | null;
+    presentation?: ChatRunPresentation | null;
   },
 ): Promise<void> {
   const agent = agentStore.getByName(run.targetAgentRef);
@@ -275,6 +285,7 @@ async function deliverChatRunToAgent(
       model: run.model,
       eventCallbackUrl: `${corePublicBaseUrl()}/api/chat/runs/${encodeURIComponent(run.id)}/events`,
       userId: 'metabot-core-chat',
+      ...(run.presentation ? { presentation: run.presentation } : {}),
     };
     const message = inboxStore.enqueue({
       targetBot: run.targetAgentRef,
@@ -287,9 +298,41 @@ async function deliverChatRunToAgent(
         request,
       }),
     });
-    logger.info({ runId: run.id, targetAgentRef: run.targetAgentRef, inboxMessageId: message.id }, 'chat run enqueued for bridge relay');
+    logger.info(
+      { runId: run.id, targetAgentRef: run.targetAgentRef, inboxMessageId: message.id },
+      'chat run enqueued for bridge relay',
+    );
   } catch (err) {
     logger.warn({ err, runId: run.id, targetAgentRef: run.targetAgentRef }, 'chat run delivery failed');
+  }
+}
+
+function deliverChatRunProjectionToOrigin(
+  inboxStore: InboxStore,
+  logger: Logger,
+  run: ChatRun,
+  event: ChatRunEvent,
+): void {
+  const presentation = run.presentation;
+  if (presentation?.mode !== 'origin-proxy' || !presentation.originBotName || !presentation.chatId) return;
+  try {
+    inboxStore.enqueue({
+      targetBot: presentation.originBotName,
+      chatId: `core-chat-proxy:${run.id}`,
+      fromBot: run.targetAgentRef,
+      fromOwner: 'metabot-core',
+      fromCredentialId: 'metabot-core-system',
+      content: JSON.stringify({
+        type: 'core-chat-proxy',
+        runId: run.id,
+        targetAgentRef: run.targetAgentRef,
+        originChatId: presentation.chatId,
+        wakeLead: presentation.wakeLead !== false,
+        event,
+      }),
+    });
+  } catch (err) {
+    logger.warn({ err, runId: run.id }, 'core chat run projection enqueue failed');
   }
 }
 
@@ -314,7 +357,12 @@ function deliverChatControlToAgent(
       content: JSON.stringify({ type: 'core-chat-control', ...control }),
     });
     logger.info(
-      { runId: control.runId, action: control.action, targetAgentRef: control.targetAgentRef, inboxMessageId: message.id },
+      {
+        runId: control.runId,
+        action: control.action,
+        targetAgentRef: control.targetAgentRef,
+        inboxMessageId: message.id,
+      },
       'chat control enqueued for bridge relay',
     );
   } catch (err) {
@@ -372,11 +420,7 @@ function isWebWritableRoute(method: string, pathname: string): boolean {
   if (/^\/api\/chat\/runs\/[^/]+\/(answer|cancel)$/.test(pathname) && method === 'POST') return true;
   // Project kill (soft-kill via append-only doc) — owner-auth enforced at the
   // route layer. Matches the shape `POST /api/t5t/projects/:slug/kill`.
-  if (
-    method === 'POST'
-    && pathname.startsWith('/api/t5t/projects/')
-    && pathname.endsWith('/kill')
-  ) return true;
+  if (method === 'POST' && pathname.startsWith('/api/t5t/projects/') && pathname.endsWith('/kill')) return true;
   return false;
 }
 
@@ -450,6 +494,9 @@ function deriveOp(method: string, pathname: string): AuditOp | string {
   if (pathname === '/api/agents/heartbeat' && method === 'POST') return 'heartbeat';
   if (pathname === '/api/agents/bulk' && method === 'POST') return 'register';
   if (pathname === '/api/agents' && method === 'POST') return 'register';
+  if (pathname === '/api/agents/search' && method === 'GET') return 'search';
+  if (pathname === '/api/messages' && method === 'POST') return 'message';
+  if (pathname.startsWith('/api/messages/')) return method === 'GET' ? 'list' : 'message';
   if (pathname === '/api/whoami' && method === 'GET') return 'whoami';
   if (pathname.endsWith('/visibility') && method === 'PATCH') return 'visibility';
   // T5T-specific ops (must precede the generic POST/GET fallbacks).
@@ -465,11 +512,7 @@ function deriveOp(method: string, pathname: string): AuditOp | string {
   if (pathname === '/api/t5t/cli/kill' && method === 'POST') return 'kill';
   if (pathname === '/api/t5t/cli/reopen' && method === 'POST') return 'reopen';
   if (pathname === '/api/t5t/cli/delete' && method === 'POST') return 'delete';
-  if (
-    method === 'POST'
-    && pathname.startsWith('/api/t5t/projects/')
-    && pathname.endsWith('/kill')
-  ) return 'kill';
+  if (method === 'POST' && pathname.startsWith('/api/t5t/projects/') && pathname.endsWith('/kill')) return 'kill';
   if (pathname === '/api/t5t/board' && method === 'GET') return 'list';
   if (pathname.startsWith('/api/t5t/projects/') && method === 'GET') return 'get';
   if (pathname === '/api/web/issue-token' && method === 'POST') return 'issue';
@@ -490,10 +533,11 @@ function deriveOp(method: string, pathname: string): AuditOp | string {
   if (method === 'PATCH' || method === 'PUT') return 'update';
   if (method === 'DELETE') return 'delete';
   if (method === 'GET') {
-    const isCollection = pathname === '/api/memory/folders'
-      || pathname === '/api/memory/documents'
-      || pathname === '/api/skills'
-      || pathname === '/api/agents';
+    const isCollection =
+      pathname === '/api/memory/folders' ||
+      pathname === '/api/memory/documents' ||
+      pathname === '/api/skills' ||
+      pathname === '/api/agents';
     return isCollection ? 'list' : 'get';
   }
   return method.toLowerCase();
@@ -515,11 +559,10 @@ export function startServer(options: ServerOptions): ServerHandle {
   const agentStore = new AgentStore(db, logger.child({ module: 'agents' }));
   const inboxStore = new InboxStore(db, logger.child({ module: 'inbox' }));
   const chatStore = new ChatStore(db, logger.child({ module: 'chat' }));
-  const t5tFolderIds = loadT5tFolderIds(
-    process.env,
-    memoryStore,
-    logger.child({ module: 't5t-folders' }),
-  );
+  const messageStore = new MessageStore(db, logger.child({ module: 'messages' }));
+  const busEventHub = new BusEventHub();
+  const chatEventHub = new ChatEventHub(chatStore);
+  const t5tFolderIds = loadT5tFolderIds(process.env, memoryStore, logger.child({ module: 't5t-folders' }));
   const t5tStore = new T5tStore(memoryStore, t5tFolderIds, logger.child({ module: 't5t' }));
   const auditLog = createDefaultAuditLog(dataDir, logger);
 
@@ -527,13 +570,18 @@ export function startServer(options: ServerOptions): ServerHandle {
   const tokenFile = path.join(dataDir, 'admin-bootstrap-token.txt');
   const bootstrapToken = credentialsStore.bootstrapAdmin(tokenFile);
   if (bootstrapToken) {
-    logger.warn({ tokenFile }, 'ADMIN TOKEN BOOTSTRAPPED — stored in the protected token file; token value is not logged');
+    logger.warn(
+      { tokenFile },
+      'ADMIN TOKEN BOOTSTRAPPED — stored in the protected token file; token value is not logged',
+    );
   }
 
   const startedAt = Date.now();
   const chatDeps = {
     chat: chatStore,
     agents: agentStore,
+    events: chatEventHub,
+    busEvents: busEventHub,
     deliverRun: (run: {
       id: string;
       conversationId: string;
@@ -542,6 +590,7 @@ export function startServer(options: ServerOptions): ServerHandle {
       prompt: string;
       engine?: string | null;
       model?: string | null;
+      presentation?: ChatRunPresentation | null;
     }) => {
       void deliverChatRunToAgent(agentStore, inboxStore, logger, run);
     },
@@ -552,6 +601,15 @@ export function startServer(options: ServerOptions): ServerHandle {
       toolUseId?: string;
       answer?: string;
     }) => deliverChatControlToAgent(inboxStore, logger, control),
+    onRunEvent: (run: ChatRun, event: ChatRunEvent) => deliverChatRunProjectionToOrigin(inboxStore, logger, run, event),
+  };
+  const messageDeps = {
+    agents: agentStore,
+    messages: messageStore,
+    chat: chatStore,
+    events: busEventHub,
+    deliverRun: chatDeps.deliverRun,
+    onRunEvent: chatDeps.onRunEvent,
   };
 
   const server = http.createServer(async (req, res) => {
@@ -580,7 +638,9 @@ export function startServer(options: ServerOptions): ServerHandle {
             latencyMs: Date.now() - auditStart,
             ...(authSource ? { authSource } : {}),
           });
-        } catch { /* audit must never break the request */ }
+        } catch {
+          /* audit must never break the request */
+        }
       });
     }
 
@@ -601,8 +661,7 @@ export function startServer(options: ServerOptions): ServerHandle {
     // when you intentionally self-distribute and have confirmed your build
     // embeds no secrets (see METABOT_PACKAGE_DEFAULT_ENV_FILE in pack scripts).
     const publicDistribution =
-      process.env.METABOT_PUBLIC_DISTRIBUTION === '1'
-      || process.env.METABOT_PUBLIC_DISTRIBUTION === 'true';
+      process.env.METABOT_PUBLIC_DISTRIBUTION === '1' || process.env.METABOT_PUBLIC_DISTRIBUTION === 'true';
     const distributionAuthorized = (): boolean =>
       publicDistribution || !isAuthFailure(authenticate(req, credentialsStore));
 
@@ -619,10 +678,7 @@ export function startServer(options: ServerOptions): ServerHandle {
     // The tarball + script are built by `packages/cli/scripts/pack.sh` into
     // `packages/server/static/cli/`. Tokens are user-supplied at install time,
     // not embedded.
-    if (
-      (method === 'GET' || method === 'HEAD')
-      && (distPath === '/cli/install.sh' || distPath === '/cli/latest.tgz')
-    ) {
+    if ((method === 'GET' || method === 'HEAD') && (distPath === '/cli/install.sh' || distPath === '/cli/latest.tgz')) {
       if (!distributionAuthorized()) {
         jsonResponse(res, 401, { error: 'unauthorized' });
         return;
@@ -650,8 +706,8 @@ export function startServer(options: ServerOptions): ServerHandle {
     // only does this when METABOT_PACKAGE_DEFAULT_ENV_FILE is explicitly set —
     // another reason these endpoints are not anonymous by default.
     if (
-      (method === 'GET' || method === 'HEAD')
-      && (distPath === '/install/install.sh' || distPath === '/install/latest.tgz')
+      (method === 'GET' || method === 'HEAD') &&
+      (distPath === '/install/install.sh' || distPath === '/install/latest.tgz')
     ) {
       if (!distributionAuthorized()) {
         jsonResponse(res, 401, { error: 'unauthorized' });
@@ -677,11 +733,11 @@ export function startServer(options: ServerOptions): ServerHandle {
     const isUiHost = !uiHost || reqHost === uiHost;
 
     if (
-      isUiHost
-      && method === 'GET'
-      && !pathname.startsWith('/api/')
-      && !pathname.startsWith('/admin/')
-      && pathname !== '/health'
+      isUiHost &&
+      method === 'GET' &&
+      !pathname.startsWith('/api/') &&
+      !pathname.startsWith('/admin/') &&
+      pathname !== '/health'
     ) {
       try {
         if (tryServeStatic(res, pathname)) return;
@@ -733,9 +789,10 @@ export function startServer(options: ServerOptions): ServerHandle {
       const allowedEmails = options.uiAllowedEmails || [];
       const hasBearer = extractBearer(req) !== null;
       const webIdentityEnabled = allowedEmails.length > 0;
-      const auth = (!hasBearer && webIdentityEnabled && req.headers['x-forwarded-email'])
-        ? authenticateWeb(req, allowedEmails)
-        : authenticate(req, credentialsStore);
+      const auth =
+        !hasBearer && webIdentityEnabled && req.headers['x-forwarded-email']
+          ? authenticateWeb(req, allowedEmails)
+          : authenticate(req, credentialsStore);
       if (isAuthFailure(auth)) {
         jsonResponse(res, auth.status, { error: auth.error });
         return;
@@ -752,11 +809,7 @@ export function startServer(options: ServerOptions): ServerHandle {
       // were reached, role='member' + empty writableNamespaces would still
       // reject Memory/Skills writes — T5T uses an internal admin cred via
       // T5tStore and gates ownership at the route layer.
-      if (
-        cred.authSource === 'web'
-        && !isWebReadableRoute(method, pathname)
-        && !isWebWritableRoute(method, pathname)
-      ) {
+      if (cred.authSource === 'web' && !isWebReadableRoute(method, pathname) && !isWebWritableRoute(method, pathname)) {
         jsonResponse(res, 404, { error: 'not_found' });
         return;
       }
@@ -902,6 +955,45 @@ export function startServer(options: ServerOptions): ServerHandle {
         return jsonResult(res, agentRoutes.removeAgent(agentStore, botName, cred));
       }
 
+      // ---- Minimal durable Agent Bus protocol ----
+      if (pathname === '/api/messages' && method === 'POST') {
+        const body = await parseJsonBody(req);
+        return jsonResult(res, messageRoutes.sendMessage(messageDeps, body, cred));
+      }
+      if (pathname === '/api/messages/sessions' && method === 'POST') {
+        const body = await parseJsonBody(req);
+        return jsonResult(res, messageRoutes.registerSession(messageDeps, body, cred));
+      }
+      if (pathname === '/api/messages/sessions' && method === 'GET') {
+        const ref = query.get('agentId') || query.get('agent') || '';
+        return jsonResult(res, messageRoutes.listSessions(messageDeps, ref, query, cred));
+      }
+      const messageAckMatch = pathname.match(/^\/api\/messages\/([^/]+)\/ack$/);
+      if (messageAckMatch && method === 'POST') {
+        return jsonResult(res, messageRoutes.ackMessage(messageDeps, decodeURIComponent(messageAckMatch[1]), cred));
+      }
+      if (pathname === '/api/messages/stream' && method === 'GET') {
+        const result = messageRoutes.streamMessages(messageDeps, query, req, res, cred);
+        if (result) return jsonResult(res, result);
+        return;
+      }
+      const agentSessionsMatch = pathname.match(/^\/api\/agents\/([^/]+)\/sessions$/);
+      if (agentSessionsMatch && method === 'GET') {
+        return jsonResult(
+          res,
+          agentRoutes.listAgentSessions(
+            agentStore,
+            messageStore,
+            decodeURIComponent(agentSessionsMatch[1]),
+            query,
+            cred,
+          ),
+        );
+      }
+      if (pathname === '/api/agents/search' && method === 'GET') {
+        return jsonResult(res, agentRoutes.searchAgents(agentStore, query, cred));
+      }
+
       // ---- Inbox routes (central agent-bus inbox for CLI users) ----
       // Match order: longer paths first so `/poll` doesn't hit the bare
       // `/api/inbox/:botName` enqueue match.
@@ -909,18 +1001,11 @@ export function startServer(options: ServerOptions): ServerHandle {
       if (inboxPollMatch && method === 'POST') {
         const botName = decodeURIComponent(inboxPollMatch[1]);
         // Long-poll: handler writes the response directly.
-        const body = await parseJsonBody(req).catch(() => ({} as Record<string, unknown>));
+        const body = await parseJsonBody(req).catch(() => ({}) as Record<string, unknown>);
         const chatIdQ = query.get('chatId');
-        const chatId = chatIdQ !== null
-          ? chatIdQ
-          : (typeof body.chatId === 'string' ? body.chatId : undefined);
-        const waitMs = inboxRoutes.parsePollWaitMs(
-          query.get('wait') ?? body.wait,
-        );
-        inboxRoutes.pollInbox(
-          { inbox: inboxStore, agents: agentStore },
-          { botName, chatId, waitMs, cred, req, res },
-        );
+        const chatId = chatIdQ !== null ? chatIdQ : typeof body.chatId === 'string' ? body.chatId : undefined;
+        const waitMs = inboxRoutes.parsePollWaitMs(query.get('wait') ?? body.wait);
+        inboxRoutes.pollInbox({ inbox: inboxStore, agents: agentStore }, { botName, chatId, waitMs, cred, req, res });
         return;
       }
       const inboxMatch = pathname.match(/^\/api\/inbox\/([^/]+)$/);
@@ -978,11 +1063,19 @@ export function startServer(options: ServerOptions): ServerHandle {
         const text = await voiceResp.text();
         let body: unknown = text;
         if (text) {
-          try { body = JSON.parse(text); } catch { /* keep raw */ }
+          try {
+            body = JSON.parse(text);
+          } catch {
+            /* keep raw */
+          }
         }
         if (!voiceResp.ok) {
           logger.warn({ status: voiceResp.status }, 'chat voice transcription proxy failed');
-          return jsonResponse(res, voiceResp.status, typeof body === 'object' && body ? body : { error: 'voice_transcribe_failed' });
+          return jsonResponse(
+            res,
+            voiceResp.status,
+            typeof body === 'object' && body ? body : { error: 'voice_transcribe_failed' },
+          );
         }
         return jsonResponse(res, 200, body);
       }
@@ -995,6 +1088,13 @@ export function startServer(options: ServerOptions): ServerHandle {
         const conversationId = decodeURIComponent(chatParticipantsMatch[1]);
         const body = await parseJsonBody(req);
         return jsonResult(res, chatRoutes.addParticipant(chatDeps, conversationId, body, cred));
+      }
+      const chatStreamMatch = pathname.match(/^\/api\/chat\/conversations\/([^/]+)\/stream$/);
+      if (chatStreamMatch && method === 'GET') {
+        const conversationId = decodeURIComponent(chatStreamMatch[1]);
+        const result = chatRoutes.streamConversation(chatDeps, conversationId, req, res, cred);
+        if (result) return jsonResult(res, result);
+        return;
       }
       const chatRunsMatch = pathname.match(/^\/api\/chat\/conversations\/([^/]+)\/runs$/);
       if (chatRunsMatch && method === 'GET') {
@@ -1161,6 +1261,7 @@ export function startServer(options: ServerOptions): ServerHandle {
     skillStore,
     agentStore,
     inboxStore,
+    messageStore,
     chatStore,
     t5tStore,
     auditLog,

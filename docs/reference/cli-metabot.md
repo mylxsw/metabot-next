@@ -86,14 +86,39 @@ metabot bot <name>                  # get bot details
 
 ### Agent talk
 
+For durable point-to-point delivery through Personal Core, prefer the minimal
+Agent Bus command:
+
+```bash
+metabot send <agentId> "prompt"
+metabot send <agentId> "prompt" --session <sessionId> --idempotency-key <key>
+metabot send <agentId> "background task" --implicit
+```
+
+Core persists the message and logical run, resolves a usable target session,
+and returns `messageId`, `sessionId`, and `runId`. Set
+`--origin-chat <oc_...> --origin-bot <name>` when a Feishu-origin bridge should
+receive progress; use `--child-direct` to keep presentation in the target chat.
+
 ```bash
 metabot talk <bot> <chatId> <prompt>      # talk to a bot (bridge /api/talk)
 metabot talk alice/bot <chatId> <prompt>  # talk to a specific peer's bot
 ```
 
 The bot name supports [qualified names](../features/peers.md#qualified-names)
-(`peerName/botName`) for cross-instance routing. This is the bridge-local talk
-path; `metabot agents talk` is the separate central-registry P2P variant.
+(`peerName/botName`) for bridge-local routing. For durable cross-agent
+communication through Personal Core, use:
+
+```bash
+metabot send <agentId> "prompt"
+metabot send <agentId> "prompt" --session <sessionId> --idempotency-key <key>
+metabot send <agentId> "background task" --implicit
+```
+
+Core persists the message and logical run, resolves a usable target session,
+and returns `messageId`, `sessionId`, and `runId`. In a Feishu-origin context,
+`--origin-chat <oc_...> --origin-bot <name>` projects run events back to the
+origin bot; `--child-direct` keeps presentation in the target agent chat.
 
 ### Peers
 

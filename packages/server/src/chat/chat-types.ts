@@ -3,6 +3,15 @@ export type ChatParticipantKind = 'user' | 'agent';
 export type ChatMessageKind = 'user' | 'assistant' | 'system';
 export type ChatRunStatus = 'queued' | 'running' | 'waiting_user' | 'completed' | 'failed' | 'canceled';
 export type ChatRunEventKind = 'state' | 'complete' | 'question' | 'file' | 'log' | 'error';
+export interface ChatRunPresentation {
+  mode: 'child-direct' | 'origin-proxy';
+  chatId: string;
+  targetAgentRef: string;
+  requestedBy: string;
+  originBotName?: string;
+  wakeLead?: boolean;
+  teamName?: string;
+}
 
 export interface ChatConversation {
   id: string;
@@ -40,6 +49,8 @@ export interface ChatMessage {
   content: string;
   mentionedAgentRefs: string[];
   runId: string | null;
+  replyTo?: string;
+  senderSessionId?: string;
   createdAt: string;
 }
 
@@ -69,6 +80,9 @@ export interface ChatRun {
   completedAt: string | null;
   error: string | null;
   finalMessageId: string | null;
+  idempotencyOwner?: string | null;
+  idempotencyKey?: string | null;
+  presentation?: ChatRunPresentation | null;
 }
 
 export interface ChatRunEvent {
@@ -92,3 +106,9 @@ export interface ChatFile {
   createdBy: string;
   createdAt: string;
 }
+
+export type ChatLiveEvent =
+  | { type: 'message.created'; conversationId: string; message: ChatMessage }
+  | { type: 'run.updated'; conversationId: string; run: ChatRun }
+  | { type: 'run.event'; conversationId: string; runId: string; event: ChatRunEvent }
+  | { type: 'file.created'; conversationId: string; file: ChatFile };

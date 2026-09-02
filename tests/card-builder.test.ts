@@ -57,6 +57,24 @@ describe('buildCard', () => {
     expect(toolEl).toBeUndefined();
   });
 
+  it('keeps a tool summary when a complete turn has no response text', () => {
+    const state: CardState = {
+      status: 'complete',
+      userPrompt: 'run the task',
+      responseText: '',
+      toolCalls: [
+        { name: 'Read', detail: '`src/index.ts`', status: 'done' },
+        { name: 'Edit', detail: '`src/index.ts`', status: 'done' },
+      ],
+    };
+    const json = JSON.parse(buildCard(state));
+    const toolEl = json.elements.find(
+      (e: any) => e.tag === 'markdown' && /\*\*Edit\*\* · 2 tools/.test(e.content),
+    );
+    expect(toolEl).toBeDefined();
+    expect(toolEl.content).toContain('✅');
+  });
+
   it('builds complete card with stats', () => {
     const state: CardState = {
       status: 'complete',

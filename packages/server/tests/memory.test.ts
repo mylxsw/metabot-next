@@ -100,6 +100,19 @@ describe('MemoryStore + ACL', () => {
     expect(bResults[0].path.startsWith('/shared/')).toBe(true);
   });
 
+  it('search supports ranked offset pagination', () => {
+    kit = makeKit('mem-search-offset');
+    const admin = issue(kit, 'admin', 'admin');
+    for (const [title, token] of [['first', 'alpha'], ['second', 'beta'], ['third', 'gamma']]) {
+      kit.memory.createDocument({ title, path: `/shared/${title}`, content: `page-token ${token}` }, admin);
+    }
+    const first = kit.memory.searchDocuments('page-token', 1, admin);
+    const second = kit.memory.searchDocuments('page-token', 1, admin, 1);
+    expect(first).toHaveLength(1);
+    expect(second).toHaveLength(1);
+    expect(second[0].id).not.toBe(first[0].id);
+  });
+
   it('deleteFolder cascades + enforces ACL', () => {
     kit = makeKit('mem-delete');
     const admin = issue(kit, 'admin', 'admin');

@@ -21,6 +21,11 @@ Core Console Chat 把实时执行与 Core 的持久 Conversation、Run 和多 Ag
 - 创建 Agent 私聊或带 `@Agent` 路由的群聊
 - 为每个会话选择引擎和模型
 
+控制台可使用同一 Bearer Token 订阅
+`GET /api/chat/conversations/<id>/stream`。连接先发送 `snapshot`，随后推送
+`message.created`、`run.updated`、`run.event` 和 `file.created` 事件。订阅按会话参与者
+授权；非参与者返回 `403`，空闲连接会定期收到注释心跳，避免代理关闭连接。
+
 ## 架构 {#architecture}
 
 ```text

@@ -18,45 +18,43 @@ async function importFresh(): Promise<typeof import('../src/agents.js')> {
   return await import('../src/agents.js');
 }
 
-describe('metabot agents talk', () => {
-  it('routes registry peers through the core inbox relay instead of direct /api/talk', async () => {
+describe('metabot agents registry', () => {
+  it('prints registry help without exposing Agent Bus delivery commands or reading config', async () => {
+    process.env.METABOT_CORE_TOKEN = '';
+    process.env.METABOT_CORE_URL = '';
+    const fetchMock = vi.fn() as unknown as typeof fetch;
+    vi.stubGlobal('fetch', fetchMock);
+    const stdout = vi.spyOn(process.stdout, 'write').mockReturnValue(true);
+
+    const mod = await importFresh();
+    await mod.run(['--help']);
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    const output = stdout.mock.calls.map((c) => String(c[0])).join('');
+    expect(output).toContain('metabot send <agentId>');
+    expect(output).toContain('remove  <botName>');
+    expect(output).not.toContain('talk <peer>');
+  });
+
+  it('removes an owned registry row through the core delete route', async () => {
     const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
-      if (url === 'https://example.test/core/api/agents') {
-        return new Response(JSON.stringify({
-          agents: [
-            { botName: 'alice', url: 'http://alice:9100', visible: true, lastSeenAt: 'now' },
-          ],
-        }), {
-          status: 200,
-          headers: { 'content-type': 'application/json' },
-        });
-      }
-      if (url === 'https://example.test/core/api/inbox/worker') {
-        return new Response(JSON.stringify({ message: { id: 'msg_1' } }), {
-          status: 200,
-          headers: { 'content-type': 'application/json' },
-        });
-      }
-      return new Response(JSON.stringify({ error: 'unexpected', url, init }), { status: 500 });
+      expect(url).toBe('https://example.test/core/api/agents/bus-live-receiver-1');
+      expect(init?.method).toBe('DELETE');
+      return new Response(JSON.stringify({ botName: 'bus-live-receiver-1', removed: true }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
     }) as unknown as typeof fetch;
     vi.stubGlobal('fetch', fetchMock);
     const stdout = vi.spyOn(process.stdout, 'write').mockReturnValue(true);
-    const stderr = vi.spyOn(process.stderr, 'write').mockReturnValue(true);
 
     const mod = await importFresh();
-    await mod.run(['talk', 'alice/worker', 'chat1', 'hello']);
+    await mod.run(['remove', 'bus-live-receiver-1']);
 
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-    const relayCall = (fetchMock as unknown as { mock: { calls: [string, RequestInit][] } }).mock.calls[1]!;
-    expect(relayCall[0]).toBe('https://example.test/core/api/inbox/worker');
-    expect(relayCall[1].method).toBe('POST');
-    expect(JSON.parse(String(relayCall[1].body))).toEqual({ chatId: 'chat1', content: 'hello' });
-    expect(
-      (fetchMock as unknown as { mock: { calls: [string, RequestInit][] } }).mock.calls.some(
-        ([url]) => url === 'http://alice:9100/api/talk',
-      ),
-    ).toBe(false);
-    expect(stdout.mock.calls.map((c) => String(c[0])).join('')).toContain('(relay)');
-    expect(stderr.mock.calls.map((c) => String(c[0])).join('')).toContain('id=msg_1');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(stdout.mock.calls.map((c) => String(c[0])).join(''))).toEqual({
+      botName: 'bus-live-receiver-1',
+      removed: true,
+    });
   });
 });

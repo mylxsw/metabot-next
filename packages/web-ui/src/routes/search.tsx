@@ -8,19 +8,27 @@ interface Combined {
   docs: SearchResult[] | null;
   skills: SkillSearchResult[] | null;
   err: string | null;
+  docsHasMore: boolean;
+  docsLoadingMore: boolean;
+  docsLoadError: string | null;
 }
+
+const EMPTY: Combined = {
+  docs: null, skills: null, err: null, docsHasMore: false, docsLoadingMore: false, docsLoadError: null,
+};
+const PAGE_SIZE = 20;
 
 export function Search() {
   const loc = useLocation();
   const q = new URLSearchParams(loc.search).get('q') || '';
 
-  const [state, setState] = useState<Combined>({ docs: null, skills: null, err: null });
+  const [state, setState] = useState<Combined>(EMPTY);
 
   useEffect(() => {
-    if (!q) { setState({ docs: [], skills: [], err: null }); return; }
+    if (!q) { setState({ ...EMPTY, docs: [], skills: [] }); return; }
     let live = true;
-    setState({ docs: null, skills: null, err: null });
-    Promise.allSettled([api.searchMemory(q, 20), api.searchSkills(q)])
+    setState(EMPTY);
+    Promise.allSettled([api.searchMemory(q, PAGE_SIZE), api.searchSkills(q)])
       .then(([m, s]) => {
         if (!live) return;
         const docs = m.status === 'fulfilled' ? m.value.results : [];
@@ -29,10 +37,23 @@ export function Search() {
           m.status === 'rejected' && m.reason instanceof ApiError && m.reason.status !== 401
             ? `memory · ${m.reason.code}`
             : null;
-        setState({ docs, skills, err });
+        setState({ docs, skills, err, docsHasMore: docs.length === PAGE_SIZE, docsLoadingMore: false, docsLoadError: null });
       });
     return () => { live = false; };
   }, [q]);
+
+  async function loadMore() {
+    if (!q || !state.docs || !state.docsHasMore || state.docsLoadingMore) return;
+    const offset = state.docs.length;
+    setState((cur) => ({ ...cur, docsLoadingMore: true, docsLoadError: null }));
+    try {
+      const next = await api.searchMemory(q, PAGE_SIZE, offset);
+      setState((cur) => ({ ...cur, docs: [...(cur.docs || []), ...next.results], docsHasMore: next.results.length === PAGE_SIZE, docsLoadingMore: false }));
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 401) return;
+      setState((cur) => ({ ...cur, docsLoadingMore: false, docsLoadError: e instanceof Error ? e.message : String(e) }));
+    }
+  }
 
   return (
     <div className="main">
@@ -66,7 +87,8 @@ export function Search() {
           ) : state.docs.length === 0 ? (
             <div className="state">no document matches</div>
           ) : (
-            state.docs.map((r) => (
+            <>
+            {state.docs.map((r) => (
               <Link key={r.id} to={`/memory${r.path}`} className="search-row">
                 <div className="head">
                   <span className={r.content_type === 'text/html' ? 'badge html' : 'badge md'}>
@@ -83,7 +105,10 @@ export function Search() {
                   dangerouslySetInnerHTML={{ __html: renderSafeSnippet(r.snippet || '') }}
                 />
               </Link>
-            ))
+            ))}
+            {state.docsLoadError && <div className="state err">{state.docsLoadError} · <button type="button" onClick={loadMore}>retry</button></div>}
+            {state.docsHasMore && !state.docsLoadError && <div className="state"><button type="button" disabled={state.docsLoadingMore} onClick={loadMore}>{state.docsLoadingMore ? 'loading…' : 'load more'}</button></div>}
+            </>
           )}
         </section>
 

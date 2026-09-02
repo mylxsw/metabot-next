@@ -21,6 +21,13 @@ Run, and multi-Agent model:
 - Agent DMs and groups routed with `@Agent`
 - per-conversation engine and model selection
 
+The console can subscribe to `GET /api/chat/conversations/<id>/stream` with the
+same Bearer token. The stream sends an initial `snapshot` event, then
+`message.created`, `run.updated`, `run.event`, and `file.created` events as the
+conversation changes. It is participant-scoped; non-participants receive
+`403`, and the server emits periodic comment heartbeats to keep proxies from
+closing idle connections.
+
 ## Architecture
 
 ```text

@@ -1,8 +1,8 @@
 # @xvirobotics/cli
 
-`metabot` — unified CLI that dispatches to the metabot-core subcommand
-families. Thin wrapper over the existing per-family CLIs; no logic of
-its own beyond subcommand routing.
+`metabot` — unified CLI for Personal Core, including the durable Agent Bus
+send path. The binary keeps user-selected Core URLs and tokens configurable;
+no hosted or private service is required.
 
 ## Subcommands
 
@@ -10,12 +10,14 @@ its own beyond subcommand routing.
 |----------------------|----------------------------|--------------------------------|
 | `metabot memory`     | `@xvirobotics/metamemory`  | alias of `mm`                  |
 | `metabot skills`     | `@xvirobotics/skill-hub`   | alias of `mh`                  |
-| `metabot agents`     | (pending MR5)              | prints placeholder string      |
+| `metabot agents`     | Personal Core agent registry | list, search, register, visibility, sessions |
+| `metabot send`       | Personal Core Agent Bus      | durable point-to-point message with optional session/idempotency |
 | `metabot t5t`        | (pending Phase 3 — trunks) | prints placeholder string      |
 | `metabot help`       |                            | also `--help`, `-h`, no args   |
 
-The existing `mm` and `mh` binaries keep working unchanged — this is
-additive.
+The existing `mm` and `mh` binaries keep working unchanged. Use
+`metabot send <agentId> "message"` for Agent Bus communication; Core resolves
+the target session and returns message, session, and run IDs.
 
 ## Install
 

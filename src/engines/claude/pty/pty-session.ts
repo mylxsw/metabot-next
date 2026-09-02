@@ -16,6 +16,7 @@ import xterm from '@xterm/headless';
 const { Terminal } = xterm;
 type XtermTerminal = InstanceType<typeof Terminal>;
 import type { Logger } from '../../../utils/logger.js';
+import { claudeProjectsDir } from '../session-lister.js';
 import type {
   PtyClaudeSession as IPtyClaudeSession,
   PtyClaudeSessionOptions,
@@ -57,22 +58,15 @@ class PtyClaudeSessionImpl implements IPtyClaudeSession {
     // Session id: adopt resume id or self-generate.
     this.sessionId = opts.resume ?? randomUUID();
 
-    // Compute jsonl path: ~/.claude/projects/<escaped-cwd>/<sessionId>.jsonl
-    // Escaped cwd: every '/' replaced by '-' (leading slash → leading dash).
-    // cwd MUST be absolute here — a relative cwd (e.g. ".") escapes to "." and
-    // the tail points at the wrong dir, so the scanner reads nothing and the
-    // Feishu card renders blank. Config should already absolutize this
-    // (expandUserPath), but resolve defensively so the path derivation matches
-    // exactly what claude itself does (it derives its jsonl dir from its cwd).
-    const resolvedCwd = path.resolve(opts.cwd);
-    const escaped = resolvedCwd.replace(/\//g, '-');
-    this.jsonlPath = path.join(
-      os.homedir(),
-      '.claude',
-      'projects',
-      escaped,
-      `${this.sessionId}.jsonl`,
-    );
+    // Compute jsonl path via the shared claudeProjectsDir() (single source of
+    // truth with session-lister): claude replaces EVERY non-alphanumeric char
+    // with '-' — not just '/'. Underscores/dots/spaces all become '-' (verified
+    // against live ~/.claude/projects: /u/openclaw_workspace →
+    // -u-openclaw-workspace, ~/.openclaw → --openclaw). Replacing only '/'
+    // points the scanner at a nonexistent file whenever the cwd contains '_'
+    // (e.g. openclaw_workspace) — the scanner then waits forever and every
+    // reply comes back empty.
+    this.jsonlPath = path.join(claudeProjectsDir(opts.cwd), `${this.sessionId}.jsonl`);
 
     this.spawn();
   }

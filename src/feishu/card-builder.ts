@@ -75,10 +75,13 @@ export function buildCard(state: CardState): string {
   // for the rationale (users only care about the final answer; the running
   // tool list was noise). One line while in flight so a hung run is visibly
   // hung; section disappears entirely on complete/error.
+  // Keep the summary on an empty successful turn. Hiding it on every
+  // completed card assumes a final response body exists; tool-only turns
+  // would otherwise render as a blank "Complete" card with only the footer.
   if (
     state.toolCalls.length > 0 &&
-    state.status !== 'complete' &&
-    state.status !== 'error'
+    state.status !== 'error' &&
+    (state.status !== 'complete' || !state.responseText.trim())
   ) {
     const last  = state.toolCalls[state.toolCalls.length - 1];
     const icon  = last.status === 'running' ? '⏳' : '✅';

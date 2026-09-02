@@ -6,6 +6,7 @@ export interface AgentRecord {
   id: string;
   botName: string;
   url: string;
+  description: string;
   visible: boolean;
   /**
    * When true, the CLI defaults this bot's `metabot memory create/mkdir`
@@ -39,6 +40,7 @@ export interface AgentRecord {
 export interface RegisterInput {
   botName: string;
   url: string;
+  description?: string;
   visible?: boolean;
   memoryPublic?: boolean;
   ownerCredentialId: string;
@@ -121,9 +123,9 @@ export class AgentStore {
     // and stay locked to public-visibility-only behavior.
     if (!cols.some((c) => c.name === 'owner_name')) {
       this.db.exec(`ALTER TABLE agents ADD COLUMN owner_name TEXT NOT NULL DEFAULT ''`);
-      const hasCredentials = this.db.prepare(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name='credentials'",
-      ).get();
+      const hasCredentials = this.db
+        .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='credentials'")
+        .get();
       if (hasCredentials) {
         this.db.exec(`
           UPDATE agents
@@ -142,68 +144,99 @@ export class AgentStore {
     if (!cols.some((c) => c.name === 'visible_to_owners')) {
       this.db.exec(`ALTER TABLE agents ADD COLUMN visible_to_owners TEXT NOT NULL DEFAULT '[]'`);
     }
+
+    // Idempotent migration for `description` (added 2026-07-07). This is a
+    // user-facing purpose string surfaced in the Agents UI and populated from
+    // bots.json or CLI registration. Empty string preserves legacy rows.
+    if (!cols.some((c) => c.name === 'description')) {
+      this.db.exec(`ALTER TABLE agents ADD COLUMN description TEXT NOT NULL DEFAULT ''`);
+    }
   }
 
   register(input: RegisterInput): AgentRecord {
     const now = new Date().toISOString();
     const visible = input.visible !== false;
 
-    const existing = this.db.prepare(
-      'SELECT id, owner_credential_id, memory_public FROM agents WHERE bot_name = ?',
-    ).get(input.botName) as
-      | { id: string; owner_credential_id: string; memory_public: 0 | 1 }
+    const existing = this.db
+      .prepare('SELECT id, owner_credential_id, owner_name, memory_public FROM agents WHERE bot_name = ?')
+      .get(input.botName) as
+      | { id: string; owner_credential_id: string; owner_name: string | null; memory_public: 0 | 1 }
       | undefined;
 
     if (existing) {
-      if (existing.owner_credential_id !== input.ownerCredentialId) {
+      const sameCredential = existing.owner_credential_id === input.ownerCredentialId;
+      const sameOwner = !!existing.owner_name && existing.owner_name === input.ownerName;
+      if (!sameCredential && !sameOwner) {
         throw new NameSquatError(input.botName);
       }
       // memoryPublic only changes if the caller passed it explicitly — this
       // lets a bot toggle it at runtime via `metabot memory visibility` and
       // not have the next bridge re-register clobber the choice (bots.json
       // doesn't carry it unless the user wants it baked in).
-      const memoryPublic = input.memoryPublic === undefined
-        ? existing.memory_public === 1
-        : input.memoryPublic === true;
+      const memoryPublic =
+        input.memoryPublic === undefined ? existing.memory_public === 1 : input.memoryPublic === true;
       // ownerName re-sync on every register so a credential rotation that
       // preserves ownerCredentialId but changes ownerName keeps the row
       // accurate. Owner-bypass reads owner_name directly.
-      this.db.prepare(`
+      this.db
+        .prepare(
+          `
         UPDATE agents SET
-          url = ?, visible = ?, memory_public = ?, owner_name = ?, last_seen_at = ?
+          url = ?, description = ?, visible = ?, memory_public = ?,
+          owner_credential_id = ?, owner_name = ?, last_seen_at = ?
         WHERE bot_name = ?
-      `).run(
-        input.url, visible ? 1 : 0, memoryPublic ? 1 : 0, input.ownerName ?? '', now, input.botName,
-      );
+      `,
+        )
+        .run(
+          input.url,
+          input.description ?? '',
+          visible ? 1 : 0,
+          memoryPublic ? 1 : 0,
+          input.ownerCredentialId,
+          input.ownerName ?? '',
+          now,
+          input.botName,
+        );
       this.logger.info({ botName: input.botName }, 'agent re-registered');
       return this.getByName(input.botName)!;
     }
 
     const id = crypto.randomUUID();
     const memoryPublic = input.memoryPublic !== false;
-    this.db.prepare(`
+    this.db
+      .prepare(
+        `
       INSERT INTO agents (id, bot_name, url, talk_secret, visible, memory_public,
-        owner_credential_id, owner_name, registered_at, last_seen_at)
-      VALUES (?, ?, ?, NULL, ?, ?, ?, ?, ?, ?)
-    `).run(
-      id, input.botName, input.url, visible ? 1 : 0, memoryPublic ? 1 : 0,
-      input.ownerCredentialId, input.ownerName ?? '', now, now,
-    );
+        owner_credential_id, owner_name, description, registered_at, last_seen_at)
+      VALUES (?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?)
+    `,
+      )
+      .run(
+        id,
+        input.botName,
+        input.url,
+        visible ? 1 : 0,
+        memoryPublic ? 1 : 0,
+        input.ownerCredentialId,
+        input.ownerName ?? '',
+        input.description ?? '',
+        now,
+        now,
+      );
     this.logger.info({ botName: input.botName, id }, 'agent registered');
     return this.getByName(input.botName)!;
   }
 
   heartbeat(botName: string, ownerCredentialId: string): string {
-    const existing = this.db.prepare(
-      'SELECT owner_credential_id FROM agents WHERE bot_name = ?',
-    ).get(botName) as { owner_credential_id: string } | undefined;
+    const existing = this.db.prepare('SELECT owner_credential_id FROM agents WHERE bot_name = ?').get(botName) as
+      | { owner_credential_id: string }
+      | undefined;
     if (!existing) throw new AgentNotFoundError(botName);
     if (existing.owner_credential_id !== ownerCredentialId) {
       throw new NameSquatError(botName);
     }
     const now = new Date().toISOString();
-    this.db.prepare('UPDATE agents SET last_seen_at = ? WHERE bot_name = ?')
-      .run(now, botName);
+    this.db.prepare('UPDATE agents SET last_seen_at = ? WHERE bot_name = ?').run(now, botName);
     return now;
   }
 
@@ -217,10 +250,13 @@ export class AgentStore {
     if (!botNames.length) return {};
     const now = new Date().toISOString();
     const owned = new Set(
-      (this.db.prepare(
-        `SELECT bot_name FROM agents WHERE owner_credential_id = ? AND bot_name IN (${botNames.map(() => '?').join(',')})`,
-      ).all(ownerCredentialId, ...botNames) as Array<{ bot_name: string }>)
-        .map((r) => r.bot_name),
+      (
+        this.db
+          .prepare(
+            `SELECT bot_name FROM agents WHERE owner_credential_id = ? AND bot_name IN (${botNames.map(() => '?').join(',')})`,
+          )
+          .all(ownerCredentialId, ...botNames) as Array<{ bot_name: string }>
+      ).map((r) => r.bot_name),
     );
     if (!owned.size) return {};
     const update = this.db.prepare('UPDATE agents SET last_seen_at = ? WHERE bot_name = ?');
@@ -235,18 +271,34 @@ export class AgentStore {
 
   /** Returns all agent records owned by the given credential (any visibility). */
   listOwnedBy(ownerCredentialId: string): AgentRecord[] {
-    const rows = this.db.prepare(
-      'SELECT * FROM agents WHERE owner_credential_id = ?',
-    ).all(ownerCredentialId) as RawAgentRow[];
+    const rows = this.db
+      .prepare('SELECT * FROM agents WHERE owner_credential_id = ?')
+      .all(ownerCredentialId) as RawAgentRow[];
     return rows.map(rowToRecord);
   }
 
   getByName(botName: string): AgentRecord | undefined {
-    const row = this.db.prepare('SELECT * FROM agents WHERE bot_name = ?').get(botName) as
-      | RawAgentRow
-      | undefined;
+    const row = this.db.prepare('SELECT * FROM agents WHERE bot_name = ?').get(botName) as RawAgentRow | undefined;
     if (!row) return undefined;
     return rowToRecord(row);
+  }
+
+  getById(id: string): AgentRecord | undefined {
+    const row = this.db.prepare('SELECT * FROM agents WHERE id = ?').get(id) as RawAgentRow | undefined;
+    return row ? rowToRecord(row) : undefined;
+  }
+
+  search(term?: string, username?: string): AgentRecord[] {
+    const q = (term || '').trim().toLowerCase();
+    const user = (username || '').trim().toLowerCase();
+    const rows = this.db.prepare('SELECT * FROM agents ORDER BY last_seen_at DESC').all() as RawAgentRow[];
+    return rows.map(rowToRecord).filter((a) => {
+      const text = `${a.botName} ${a.description} ${a.ownerName}`.toLowerCase();
+      return (
+        (!q || text.includes(q)) &&
+        (!user || a.ownerName.toLowerCase() === user || a.ownerName.toLowerCase().includes(user))
+      );
+    });
   }
 
   list(options: ListOptions = {}): AgentRecord[] {
@@ -254,9 +306,7 @@ export class AgentStore {
     const now = options.now ?? Date.now();
     const includeHidden = options.includeHidden === true;
 
-    const baseSql = includeHidden
-      ? 'SELECT * FROM agents'
-      : 'SELECT * FROM agents WHERE visible = 1';
+    const baseSql = includeHidden ? 'SELECT * FROM agents' : 'SELECT * FROM agents WHERE visible = 1';
     const rows = this.db.prepare(`${baseSql} ORDER BY last_seen_at DESC`).all() as RawAgentRow[];
 
     const fresh: AgentRecord[] = [];
@@ -269,14 +319,14 @@ export class AgentStore {
   }
 
   setVisibility(botName: string, visible: boolean): AgentRecord {
-    const result = this.db.prepare('UPDATE agents SET visible = ? WHERE bot_name = ?')
-      .run(visible ? 1 : 0, botName);
+    const result = this.db.prepare('UPDATE agents SET visible = ? WHERE bot_name = ?').run(visible ? 1 : 0, botName);
     if (result.changes === 0) throw new AgentNotFoundError(botName);
     return this.getByName(botName)!;
   }
 
   setMemoryPublic(botName: string, memoryPublic: boolean): AgentRecord {
-    const result = this.db.prepare('UPDATE agents SET memory_public = ? WHERE bot_name = ?')
+    const result = this.db
+      .prepare('UPDATE agents SET memory_public = ? WHERE bot_name = ?')
       .run(memoryPublic ? 1 : 0, botName);
     if (result.changes === 0) throw new AgentNotFoundError(botName);
     return this.getByName(botName)!;
@@ -288,7 +338,8 @@ export class AgentStore {
    * verbatim. Returns the post-update record.
    */
   setVisibleToOwners(botName: string, owners: string[]): AgentRecord {
-    const result = this.db.prepare('UPDATE agents SET visible_to_owners = ? WHERE bot_name = ?')
+    const result = this.db
+      .prepare('UPDATE agents SET visible_to_owners = ? WHERE bot_name = ?')
       .run(JSON.stringify(owners), botName);
     if (result.changes === 0) throw new AgentNotFoundError(botName);
     return this.getByName(botName)!;
@@ -317,6 +368,7 @@ interface RawAgentRow {
   id: string;
   bot_name: string;
   url: string;
+  description: string | null;
   talk_secret: string | null;
   visible: 0 | 1;
   memory_public: 0 | 1;
@@ -332,6 +384,7 @@ function rowToRecord(row: RawAgentRow): AgentRecord {
     id: row.id,
     botName: row.bot_name,
     url: row.url,
+    description: row.description || '',
     visible: row.visible === 1,
     memoryPublic: row.memory_public === 1,
     ownerCredentialId: row.owner_credential_id,

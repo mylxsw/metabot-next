@@ -1,6 +1,6 @@
 ---
 name: metabot
-description: "Unified MetaBot CLI for personal Memory, Skill Hub, agent registry and inbox relay, Agent Teams, T5T, scheduling, and bridge runtime operations."
+description: "Unified MetaBot CLI for personal Memory, Skill Hub, durable Agent Bus messaging, agent registry, Agent Teams, T5T, scheduling, and bridge runtime operations."
 ---
 
 # MetaBot Personal CLI Router
@@ -15,7 +15,7 @@ semantics only; project execution policy belongs in the workspace `AGENTS.md`.
 | --- | --- |
 | Search, read, create, update, share, or delete Meta Memory | [`references/memory.md`](references/memory.md) |
 | Browse, install, or publish a Skill | [`references/skills.md`](references/skills.md) |
-| Inspect Agents or use the inbox relay | [`references/agents.md`](references/agents.md) |
+| Inspect Agents or send durable Agent Bus messages | [`references/agents.md`](references/agents.md) |
 | Coordinate an Agent Team | Use the separate `metabot-team` Skill |
 | Read or write T5T status | [`references/t5t.md`](references/t5t.md) |
 | Schedule work or inspect a runtime | [`references/runtime.md`](references/runtime.md) |
@@ -27,8 +27,7 @@ metabot memory search "query"
 metabot memory get <id|path>
 metabot skills list
 metabot agents list
-metabot agents talk <agent> "message"
-metabot inbox poll --loop
+metabot send <agentId> "message"
 metabot teams status <team> --summary
 metabot t5t push <project> <YYYY-MM-DD> "entry"
 metabot health
@@ -43,6 +42,9 @@ bridge-local command is available.
 - Override it with `METABOT_CORE_URL` for another user-configured Core.
 - Use `METABOT_CORE_TOKEN`, or the first line of `~/.metabot-core/token`.
 - `metabot agents whoami` shows the current Core identity.
+- `metabot send` returns durable `messageId`, `sessionId`, and `runId` values;
+  pass `--session` or `--idempotency-key` when a retry must target the same
+  logical run.
 - Project and global Skill destinations are distinct discovery scopes.
 - MetaBot's own `metabot` and `metabot-team` bundles are global-only; project
   mirrors are retired outside discovery roots so stale copies cannot shadow

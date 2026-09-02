@@ -419,8 +419,10 @@ export const api = {
     request<{ id: string; name: string; path: string; parent_id: string | null }>(
       `/api/memory/folders/${encodeIdOrPath(idOrPath)}`,
     ),
-  searchMemory: (q: string, limit = 20) =>
-    request<{ results: SearchResult[] }>(`/api/memory/search?q=${encodeURIComponent(q)}&limit=${limit}`),
+  searchMemory: (q: string, limit = 20, offset = 0) =>
+    request<{ results: SearchResult[] }>(
+      `/api/memory/search?q=${encodeURIComponent(q)}&limit=${limit}&offset=${offset}`,
+    ),
 
   listSkills: () => request<{ skills: SkillSummary[] }>('/api/skills'),
   getSkill: (name: string) => request<SkillRecord>(`/api/skills/${encodeURIComponent(name)}`),

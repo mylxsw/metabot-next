@@ -182,7 +182,8 @@ export function search(store: MemoryStore, query: URLSearchParams, cred: Credent
   const q = query.get('q');
   if (!q || !q.trim()) return err(400, 'q_required');
   const limit = parseInt(query.get('limit') || '20', 10) || 20;
-  const results = store.searchDocuments(q, limit, cred).filter((r) => !isHiddenFromMemoryView(r.path));
+  const offset = Math.max(parseInt(query.get('offset') || '0', 10) || 0, 0);
+  const results = store.searchDocuments(q, limit, cred, offset).filter((r) => !isHiddenFromMemoryView(r.path));
   return { status: 200, body: { results } };
 }
 

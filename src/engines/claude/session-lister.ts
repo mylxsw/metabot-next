@@ -27,12 +27,14 @@ export interface SessionSummary {
 /**
  * Directory where `claude` stores this cwd's session transcripts.
  *
- * MUST match `pty-session.ts` exactly: every '/' in the absolute cwd becomes
- * '-' (leading slash → leading dash). Exported so tests share one source of
- * truth with the path derivation under test.
+ * MUST match what claude itself does: EVERY non-alphanumeric char (not just
+ * '/', but also '_', '.', spaces, CJK brackets…) becomes '-'. Verified against
+ * live ~/.claude/projects: /u/openclaw_workspace → -u-openclaw-workspace,
+ * ~/.openclaw → --openclaw. Replacing only '/' breaks any cwd containing '_'.
+ * Exported so tests share one source of truth with the path derivation under test.
  */
 export function claudeProjectsDir(cwd: string, homeDir: string = os.homedir()): string {
-  const escaped = path.resolve(cwd).replace(/\//g, '-');
+  const escaped = path.resolve(cwd).replace(/[^a-zA-Z0-9-]/g, '-');
   return path.join(homeDir, '.claude', 'projects', escaped);
 }
 

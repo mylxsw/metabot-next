@@ -163,10 +163,13 @@ export function buildCardV2(state: CardState): string {
   // errored. Web UI keeps its own collapsible per-tool view (see
   // packages/web-ui/src/routes/chat.tsx); this only affects the
   // Feishu surface.
+  // Keep the summary on an empty successful turn. Hiding it on every
+  // completed card assumes a final response body exists; tool-only turns
+  // would otherwise render as a blank "Complete" card with only the footer.
   if (
     state.toolCalls.length > 0 &&
-    state.status !== 'complete' &&
-    state.status !== 'error'
+    state.status !== 'error' &&
+    (state.status !== 'complete' || !state.responseText.trim())
   ) {
     const last  = state.toolCalls[state.toolCalls.length - 1];
     const icon  = last.status === 'running' ? '⏳' : '✅';

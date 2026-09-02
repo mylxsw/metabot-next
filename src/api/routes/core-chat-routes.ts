@@ -43,6 +43,14 @@ export interface CoreChatRunRequest {
   userId?: string;
   engine?: EngineName;
   model?: string;
+  presentation?: {
+    mode: 'child-direct' | 'origin-proxy';
+    chatId: string;
+    targetAgentRef: string;
+    requestedBy: string;
+    originBotName?: string;
+    wakeLead?: boolean;
+  };
   maxTurns?: number;
   allowedTools?: string[];
   voice?: {
@@ -147,6 +155,28 @@ export function parseCoreChatRunRequest(body: Record<string, unknown>): { reques
   const voice = typeof body.voice === 'object' && body.voice !== null
     ? body.voice as Record<string, unknown>
     : undefined;
+  const rawPresentation = typeof body.presentation === 'object' && body.presentation !== null
+    ? body.presentation as Record<string, unknown>
+    : undefined;
+  const presentationMode: 'child-direct' | 'origin-proxy' | undefined =
+    rawPresentation?.mode === 'child-direct' || rawPresentation?.mode === 'origin-proxy'
+      ? rawPresentation.mode
+      : undefined;
+  const presentationChatId = asString(rawPresentation?.chatId);
+  const presentationTarget = asString(rawPresentation?.targetAgentRef);
+  const presentationRequestedBy = asString(rawPresentation?.requestedBy);
+  const presentation =
+    (presentationMode === 'child-direct' || presentationMode === 'origin-proxy') &&
+    presentationChatId && presentationTarget && presentationRequestedBy
+      ? {
+          mode: presentationMode,
+          chatId: presentationChatId,
+          targetAgentRef: presentationTarget,
+          requestedBy: presentationRequestedBy,
+          originBotName: asString(rawPresentation?.originBotName),
+          wakeLead: rawPresentation?.wakeLead !== false,
+        }
+      : undefined;
 
   return {
     request: {
@@ -160,6 +190,7 @@ export function parseCoreChatRunRequest(body: Record<string, unknown>): { reques
       userId: asString(body.userId),
       engine: asEngineName(body.engine),
       model: asString(body.model),
+      presentation,
       maxTurns,
       allowedTools: asStringArray(body.allowedTools),
       voice: voice ? {
@@ -647,7 +678,10 @@ export function acceptCoreChatRun(ctx: RouteContext, request: CoreChatRunRequest
     return { status: 429, body: { error: budgetCheck.reason } };
   }
 
-  const executionChatId = request.executionChatId || defaultExecutionChatId(request.conversationId, request.targetBot);
+  const executionChatId =
+    request.presentation?.mode === 'child-direct'
+      ? request.presentation.chatId
+      : request.executionChatId || defaultExecutionChatId(request.conversationId, request.targetBot);
   if (activeCoreChatRuns.get(request.runId)?.status === 'running') {
     return { status: 409, body: { error: `Run already active: ${request.runId}` } };
   }

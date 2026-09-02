@@ -146,6 +146,18 @@ describe('request', () => {
     );
     expect(captured).toBe('http://x/api/memory/search?q=hello&limit=5');
   });
+
+  it('memory search forwards --offset', async () => {
+    let captured = '';
+    const fakeFetch = (async (url: string) => {
+      captured = url;
+      return new Response('{"results":[]}', { status: 200 });
+    }) as unknown as typeof fetch;
+    vi.stubGlobal('fetch', fakeFetch);
+    const { cmdSearch } = await import('../src/commands.js');
+    await cmdSearch({ url: 'http://x', token: 't' }, { positional: ['hello'], flags: { limit: '5', offset: '10' } });
+    expect(captured).toBe('http://x/api/memory/search?q=hello&limit=5&offset=10');
+  });
 });
 
 describe('cmdCreate / cmdMkdir — write target', () => {

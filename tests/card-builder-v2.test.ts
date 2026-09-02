@@ -193,6 +193,25 @@ describe('buildCardV2', () => {
     expect(toolEl).toBeUndefined();
   });
 
+  it('keeps a tool summary when a complete turn has no response text', () => {
+    const state: CardState = {
+      status:       'complete',
+      userPrompt:   'run the task',
+      responseText: '',
+      toolCalls: [
+        { name: 'Read', detail: '`src/index.ts`', status: 'done' },
+        { name: 'Edit', detail: '`src/index.ts`', status: 'done' },
+      ],
+    };
+    const elements = findElements(JSON.parse(buildCardV2(state)));
+    const toolEl = elements.find(
+      (e) => e.tag === 'markdown' && typeof e.content === 'string'
+        && /\*\*Edit\*\* · 2 tools/.test(e.content),
+    );
+    expect(toolEl).toBeDefined();
+    expect(toolEl.content).toContain('✅');
+  });
+
   it('renders background events with status icon + last event', () => {
     const state: CardState = {
       status:       'running',

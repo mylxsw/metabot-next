@@ -3,12 +3,14 @@
 ```bash
 metabot agents list
 metabot agents whoami
-metabot agents talk <peer>[/<bot>] [<chatId>] "message"
-metabot inbox register [--bot-name <name>]
-metabot inbox poll [--chat <id>] [--once|--loop]
-metabot inbox peek [--chat <id>]
+metabot agents search "keyword"
+metabot agents show <agentId> --sessions
+metabot send <agentId> "message" [--session <sessionId>]
 ```
 
-When `chatId` is omitted, the CLI may derive a project-scoped conversation ID.
-Use an explicit ID for a thread shared across hosts. Inbox polling is the relay
-surface for CLI-only Agents without a resident bridge.
+`metabot send` is the canonical durable point-to-point path. Core resolves a
+logical session (or creates one), persists the message and run, and returns
+correlation IDs. Use `--implicit` for background work, or pair
+`--origin-chat <oc_...> --origin-bot <name>` with a configured Feishu origin
+to project progress back to that chat. `--idempotency-key` makes safe retries
+return the original run instead of creating a duplicate.
