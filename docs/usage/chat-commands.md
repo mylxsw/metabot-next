@@ -73,6 +73,27 @@ to that bot without @mentioning it.
 
 ## Telegram Group Behavior
 
+### Native command menu
+
+On every startup, Telegram bots automatically publish slash-command menus using
+`setMyCommands`. No BotFather `/setcommands` setup or additional environment variables
+are required. Type `/` for suggestions; the default private-chat menu button uses the
+same list. Descriptions are localized in Chinese with an English fallback.
+
+Common commands are `help`, `reset`, `stop`, `status`, `model`, `effort`, `resume`, and
+`memory`. Group menus additionally include `group_reply`. Enter arguments separately,
+for example `/model list`, `/effort high`, or `/group_reply@Bot all|mention|status`.
+
+Startup replaces the default-language and Chinese lists in the default, all-private-chat,
+and all-group-chat scopes. Per-chat, administrator, and other-language overrides are
+preserved and may take precedence. Existing Mini App menu buttons are not modified.
+Menus do not grant permissions: sender allowlists and group administrator checks still
+apply. Registration failures only log a warning and do not block chat; restart to retry.
+If suggestions are stale, reopen the conversation and check for
+`Telegram command menu registered` or registration warnings in the logs.
+
+### Message reply rules
+
 - Two-member groups default to `all`; member counts are cached for five minutes.
 - Larger groups default to `mention`; group administrators can override with `/group_reply@Bot all|mention|status`.
 - `groupNoMention: true` makes larger groups route every message by default.

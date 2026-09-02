@@ -69,6 +69,24 @@ Bot 的 `groupNoMention` 配置和“两人群视为私聊”的默认规则。�
 
 ## Telegram 群聊行为
 
+### 原生命令菜单
+
+Telegram Bot 每次启动时会自动通过 `setMyCommands` 同步命令菜单，无需手动在
+BotFather 配置 `/setcommands`，也无需额外环境变量。客户端输入 `/` 即可查看
+命令建议；默认私聊菜单按钮也使用这份命令列表。提供中文说明和英文兜底。
+
+公共菜单包含 `help`、`reset`、`stop`、`status`、`model`、`effort`、`resume`、
+`memory`；群聊菜单额外包含 `group_reply`。带参数的操作仍需输入参数，例如
+`/model list`、`/effort high`；群回复模式使用 `/group_reply@Bot all|mention|status`。
+
+启动会覆盖默认、所有私聊、所有群聊这三个作用域的默认语言和中文命令列表；
+单独聊天、管理员或其他语言的自定义列表不变，可能优先于这些全局列表。
+不会修改已有 Mini App 菜单按钮。菜单不是权限控制，用户白名单和群管理员校验仍然生效。
+同步失败只记录警告，不阻塞聊天；重启可重试。若列表未刷新，请重新进入对话，
+并检查日志中的 `Telegram command menu registered` 或注册失败警告。
+
+### 消息回复规则
+
 - 两人群默认使用 `all`，无需 @Bot；成员数量缓存 5 分钟。
 - 多人群默认使用 `mention`；群管理员可用 `/group_reply@Bot all|mention|status` 覆盖。
 - `bots.json` 的 `groupNoMention: true` 可让多人群默认回复全部消息。

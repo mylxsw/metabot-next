@@ -8,6 +8,7 @@ import type { IMessageSender } from '../bridge/message-sender.interface.js';
 import { TelegramSender } from './telegram-sender.js';
 import { MessageBridge } from '../bridge/message-bridge.js';
 import { TelegramGroupReplyModeStore } from './group-reply-mode-store.js';
+import { registerTelegramCommands } from './command-menu.js';
 import {
   TelegramMemberCountCache,
   isTelegramBotMentioned,
@@ -325,6 +326,9 @@ export async function startTelegramBot(config: TelegramBotConfig, logger: Logger
       botLogger.error({ err, chatId, userId }, 'Unhandled error in Telegram animation message bridge');
     });
   });
+
+  // Publish native slash-command suggestions without delaying polling or startup.
+  void registerTelegramCommands(bot.api, botLogger);
 
   // Start long polling (non-blocking)
   bot.start({
