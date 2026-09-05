@@ -159,19 +159,49 @@ function estimateCodexApiEquivalentCostUsd(
 ): number | undefined {
   if (!model || !usage) return undefined;
   const normalizedModel = model.toLowerCase();
-  if (normalizedModel !== 'gpt-5.6-sol' && normalizedModel !== 'gpt-5.6') return undefined;
+  const pricing = CODEX_API_PRICING[normalizedModel];
+  if (!pricing) return undefined;
 
   const inputTokens = Math.max(0, usage.input_tokens ?? 0);
   const cachedInputTokens = Math.min(inputTokens, Math.max(0, usage.cached_input_tokens ?? 0));
   const uncachedInputTokens = inputTokens - cachedInputTokens;
   const outputTokens = Math.max(0, usage.output_tokens ?? 0);
+  const usesLongContextPricing =
+    pricing.longContextThreshold !== undefined && inputTokens > pricing.longContextThreshold;
+  const inputMultiplier = usesLongContextPricing ? (pricing.longContextInputMultiplier ?? 1) : 1;
+  const outputMultiplier = usesLongContextPricing ? (pricing.longContextOutputMultiplier ?? 1) : 1;
 
   return (
-    uncachedInputTokens * 5
-    + cachedInputTokens * 0.5
-    + outputTokens * 30
-  ) / 1_000_000;
+    (uncachedInputTokens * pricing.input * inputMultiplier +
+      cachedInputTokens * pricing.cachedInput * inputMultiplier +
+      outputTokens * pricing.output * outputMultiplier) /
+    1_000_000
+  );
 }
+
+interface CodexApiPricing {
+  /** Standard USD price per one million tokens. */
+  input: number;
+  cachedInput: number;
+  output: number;
+  /** Long-context pricing applies only when input tokens exceed this threshold. */
+  longContextThreshold?: number;
+  longContextInputMultiplier?: number;
+  longContextOutputMultiplier?: number;
+}
+
+const CODEX_API_PRICING: Readonly<Record<string, CodexApiPricing>> = {
+  'gpt-5.6': { input: 5, cachedInput: 0.5, output: 30 },
+  'gpt-5.6-sol': { input: 5, cachedInput: 0.5, output: 30 },
+  'gpt-6-astra': {
+    input: 10,
+    cachedInput: 1,
+    output: 50,
+    longContextThreshold: 272_000,
+    longContextInputMultiplier: 2,
+    longContextOutputMultiplier: 1.5,
+  },
+};
 
 function buildResultMessage(
   usage: CodexUsage | undefined,

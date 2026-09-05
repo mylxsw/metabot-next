@@ -84,6 +84,59 @@ describe('Codex JSONL translator', () => {
     expect(cardState.costUsd).toBeCloseTo(0.44, 8);
   });
 
+  it('estimates API-equivalent cost for gpt-6-astra with cached input pricing', () => {
+    const state = createCodexTranslatorState({ model: 'gpt-6-astra', contextWindow: 1_050_000 });
+    const processor = new StreamProcessor('estimate this Astra turn');
+    let cardState = processor.processMessage({ type: 'system' });
+
+    for (const message of translateCodexJsonEvent(
+      {
+        type: 'turn.completed',
+        usage: {
+          input_tokens: 100_000,
+          cached_input_tokens: 80_000,
+          output_tokens: 10_000,
+          total_tokens: 110_000,
+        },
+      },
+      state,
+    )) {
+      cardState = processor.processMessage(message);
+    }
+
+    // 20k uncached input × $10/M + 80k cached × $1/M + 10k output × $50/M.
+    expect(cardState.costUsd).toBeCloseTo(0.78, 8);
+  });
+
+  it('uses gpt-6-astra long-context pricing only above 272k input tokens', () => {
+    const atThreshold = createCodexTranslatorState({ model: 'gpt-6-astra', contextWindow: 1_050_000 });
+    const atThresholdResult = translateCodexJsonEvent(
+      {
+        type: 'turn.completed',
+        usage: { input_tokens: 272_000, output_tokens: 1_000, total_tokens: 273_000 },
+      },
+      atThreshold,
+    )[0];
+    expect(atThresholdResult.total_cost_usd).toBeCloseTo(2.77, 8);
+
+    const aboveThreshold = createCodexTranslatorState({ model: 'gpt-6-astra', contextWindow: 1_050_000 });
+    const aboveThresholdResult = translateCodexJsonEvent(
+      {
+        type: 'turn.completed',
+        usage: {
+          input_tokens: 300_000,
+          cached_input_tokens: 100_000,
+          output_tokens: 20_000,
+          total_tokens: 320_000,
+        },
+      },
+      aboveThreshold,
+    )[0];
+
+    // Above 272k: input/cache × 2 and output × 1.5 for the full request.
+    expect(aboveThresholdResult.total_cost_usd).toBeCloseTo(5.7, 8);
+  });
+
   it('uses Codex token_count last_token_usage for ctx instead of cumulative totals', () => {
     const events: CodexJsonEvent[] = [
       { type: 'thread.started', thread_id: 'codex-thread' },
