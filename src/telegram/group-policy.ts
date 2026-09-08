@@ -23,6 +23,13 @@ export function isTelegramUserAllowed(allowedUserIds: string[] | undefined, user
   return !allowedUserIds?.length || allowedUserIds.includes(userId);
 }
 
+export function resolveTelegramBotUsername(
+  cachedUsername: string | undefined,
+  runtimeUsername: string | undefined,
+): string | undefined {
+  return runtimeUsername || cachedUsername;
+}
+
 export function isTelegramBotMentioned(
   text: string,
   entities: readonly TelegramMessageEntityLike[] | undefined,

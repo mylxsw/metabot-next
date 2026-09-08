@@ -10,10 +10,12 @@ import {
   isTelegramUserAllowed,
   normalizeTelegramCommandSuffix,
   parseTelegramGroupReplyModeCommand,
+  resolveTelegramBotUsername,
   shouldProcessTelegramGroupMessage,
   stripTelegramBotMention,
 } from '../src/telegram/group-policy.js';
 import { TelegramGroupReplyModeStore } from '../src/telegram/group-reply-mode-store.js';
+import { getTelegramCommands } from '../src/telegram/command-menu.js';
 
 const logger = {
   info: vi.fn(),
@@ -32,6 +34,27 @@ describe('Telegram group policy', () => {
     expect(isTelegramUserAllowed([], '1')).toBe(true);
     expect(isTelegramUserAllowed(['1'], '1')).toBe(true);
     expect(isTelegramUserAllowed(['1'], '2')).toBe(false);
+  });
+
+  it('recovers the bot username from runtime context after startup metadata lookup fails', () => {
+    expect(resolveTelegramBotUsername(undefined, 'wednesday_bot')).toBe('wednesday_bot');
+    expect(resolveTelegramBotUsername('cached_bot', undefined)).toBe('cached_bot');
+    expect(resolveTelegramBotUsername('old_bot', 'renamed_bot')).toBe('renamed_bot');
+    expect(normalizeTelegramCommandSuffix('/reset@wednesday_bot', undefined)).toBe('/reset@wednesday_bot');
+    expect(
+      normalizeTelegramCommandSuffix(
+        '/reset@wednesday_bot',
+        resolveTelegramBotUsername(undefined, 'wednesday_bot'),
+      ),
+    ).toBe('/reset');
+  });
+
+  it('normalizes every command published in the Telegram group menu', () => {
+    for (const { command } of getTelegramCommands('all_group_chats', '')) {
+      expect(normalizeTelegramCommandSuffix(`/${command}@wednesday_bot argument`, 'wednesday_bot')).toBe(
+        `/${command} argument`,
+      );
+    }
   });
 
   it('matches and strips only the current bot mention', () => {

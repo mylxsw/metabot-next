@@ -87,6 +87,9 @@ same list. Descriptions are localized in Chinese with an English fallback.
 Common commands are `help`, `reset`, `stop`, `status`, `model`, `effort`, `resume`, and
 `memory`. Group menus additionally include `group_reply`. Enter arguments separately,
 for example `/model list`, `/effort high`, or `/group_reply@Bot all|mention|status`.
+Telegram sends selected group commands as `/command@BotUsername`; MetaBot strips the
+current bot's suffix consistently, so `/reset@Bot` and `/stop@Bot` behave like their
+bare private-chat forms.
 
 Startup replaces the default-language and Chinese lists in the default, all-private-chat,
 and all-group-chat scopes. Per-chat, administrator, and other-language overrides are

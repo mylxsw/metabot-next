@@ -16,6 +16,7 @@ import {
   isTelegramUserAllowed,
   normalizeTelegramCommandSuffix,
   parseTelegramGroupReplyModeCommand,
+  resolveTelegramBotUsername,
   shouldProcessTelegramGroupMessage,
   stripTelegramBotMention,
   type TelegramMessageEntityLike,
@@ -76,6 +77,18 @@ export async function startTelegramBot(config: TelegramBotConfig, logger: Logger
   } catch (err) {
     botLogger.warn({ err }, 'Failed to fetch Telegram bot info during startup; continuing without username metadata');
   }
+
+  // bot.start() initializes ctx.me independently of the best-effort getMe call
+  // above. Recover the username from every update so /command@bot works even
+  // when that initial metadata request timed out.
+  bot.use(async (ctx, next) => {
+    const resolvedUsername = resolveTelegramBotUsername(botUsername, ctx.me.username);
+    if (resolvedUsername !== botUsername) {
+      botUsername = resolvedUsername;
+      botLogger.info({ botUsername }, 'Telegram bot username recovered from runtime context');
+    }
+    await next();
+  });
 
   // Handle text messages
   bot.on('message:text', async (ctx) => {
@@ -332,7 +345,8 @@ export async function startTelegramBot(config: TelegramBotConfig, logger: Logger
 
   // Start long polling (non-blocking)
   bot.start({
-    onStart: () => {
+    onStart: (botInfo) => {
+      botUsername = resolveTelegramBotUsername(botUsername, botInfo.username);
       botLogger.info('Telegram bot is running (long polling)');
     },
   });

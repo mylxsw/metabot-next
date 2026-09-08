@@ -82,6 +82,8 @@ BotFather 配置 `/setcommands`，也无需额外环境变量。客户端输入 
 公共菜单包含 `help`、`reset`、`stop`、`status`、`model`、`effort`、`resume`、
 `memory`；群聊菜单额外包含 `group_reply`。带参数的操作仍需输入参数，例如
 `/model list`、`/effort high`；群回复模式使用 `/group_reply@Bot all|mention|status`。
+Telegram 在群聊中会把菜单命令发送成 `/命令@Bot用户名`；MetaBot 会统一去掉当前
+Bot 的用户名后缀，因此 `/reset@Bot`、`/stop@Bot` 等与私聊中的裸命令行为相同。
 
 启动会覆盖默认、所有私聊、所有群聊这三个作用域的默认语言和中文命令列表；
 单独聊天、管理员或其他语言的自定义列表不变，可能优先于这些全局列表。
