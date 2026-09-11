@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-09-11
+
+### Fixed
+
+- Fixed the T5T `no_evaluator` anomaly handling with a 24-hour initialization grace period and no persisted metadata.
+- Hardened Agent Bus session safety by validating session status, rejecting sends to offline sessions, and filtering SQL status before pagination and caps.
+- Locked the transitive `fast-uri` dependency to `3.1.7`.
+
 ## [1.3.0] - 2026-07-24
 
 ### Added
