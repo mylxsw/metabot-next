@@ -86,11 +86,11 @@ metabot update
 To install one immutable release instead of following `latest`:
 
 ```bash
-metabot update --package --version 1.3.0
+metabot update --package --version 1.3.1
 ```
 
 The pinned form downloads `install.sh`, `metabot-runtime.tgz`, and
-`SHA256SUMS` from the GitHub v1.3.0 Release. Package updates verify the runtime
+`SHA256SUMS` from the GitHub v1.3.1 Release. Package updates verify the runtime
 SHA256, validate the complete personal-edition manifest and semantic version,
 and fail closed if a pinned package reports a different version.
 

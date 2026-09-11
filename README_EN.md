@@ -196,7 +196,7 @@ Each bot has its own channel credentials, engine, workspace, and sessions. Bots 
 | `/background <prompt>`                         | Run a supported background task while the chat continues               |
 | `@Bot /group-reply mention\|all\|status`       | Control one Feishu bot's reply mode in one group                       |
 | `metabot update`                               | Update a package-managed personal edition to the latest GitHub Release |
-| `metabot update --package --version 1.3.0`     | Install exactly the immutable v1.3.0 Release package                   |
+| `metabot update --package --version 1.3.1`     | Install exactly the immutable v1.3.1 Release package                   |
 | `metabot send <agentId> "message"`             | Send a durable Agent Bus message through Personal Core                  |
 
 Agent Bus messages can target a stable session and be retried safely: use
@@ -227,7 +227,7 @@ source checkouts retain an explicit Git path:
 
 ```bash
 metabot update                                  # latest GitHub Release
-metabot update --package --version 1.3.0        # exactly v1.3.0
+metabot update --package --version 1.3.1        # exactly v1.3.1
 metabot update --git                            # source checkout
 ```
 
