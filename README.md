@@ -173,7 +173,7 @@ Skills、T5T、Teams 和 CLI Access 共用同一 Token 与同一套导航。
 - **移动端写代码** — 从聊天中改代码、跑测试、查看工具并跟进长任务。
 - **Agent Teams** — 创建专门队友、并行分工，保留持久的任务和运行状态。[指南](docs/features/agent-teams.zh.md)
 - **MetaMemory** — 跨会话检索知识，并可同步到飞书知识库。[指南](docs/features/metamemory.zh.md)
-- **T5T 与 Goal** — 持久项目检查点和受监督的多轮执行。[聊天命令](docs/usage/chat-commands.zh.md)
+- **T5T 与 Goal** — 持久项目检查点和受监督的多轮执行。Core Console 的 T5T 看板默认展示只读的公司核心视图（WBC、VLM Brain、G1 Wuji Teleoperation 及平台锚点），需要时可切换全部项目；治理异常会在 24 小时初始化宽限期后派生 `no_evaluator` 提醒。[聊天命令](docs/usage/chat-commands.zh.md)
 - **Skill Hub** — 通过统一的 `metabot` CLI 安装和发布可复用 Skills。
 - **统一 Core Console** — Token 鉴权的 Chat、Agents、Memory、Skills、T5T、Teams、CLI Access 和诊断；不再维护第二套 Bridge Web UI。
 - **渠道与媒体** — 文本、富文本、图片、文件、音频、智能合并和精确 @Bot 路由。

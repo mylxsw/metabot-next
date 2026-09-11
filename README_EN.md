@@ -177,7 +177,7 @@ Each bot has its own channel credentials, engine, workspace, and sessions. Bots 
 - **Mobile coding** — edit code, run tests, inspect tools, and follow long tasks from chat.
 - **Agent Teams** — spawn focused teammates, assign parallel work, and keep durable task/run state. [Guide](docs/features/agent-teams.md)
 - **MetaMemory** — searchable knowledge shared across sessions with optional Feishu Wiki sync. [Guide](docs/features/metamemory.md)
-- **T5T and goals** — durable project checkpoints plus supervised multi-turn execution. [Chat Commands](docs/usage/chat-commands.md)
+- **T5T and goals** — durable project checkpoints plus supervised multi-turn execution. The Core Console's T5T board opens on a read-only company-core projection (WBC, VLM Brain, G1 Wuji Teleoperation, and configured platform anchors); switch to all projects when needed. Governance anomalies include a derived `no_evaluator` warning after a 24-hour initialization grace period. [Chat Commands](docs/usage/chat-commands.md)
 - **Skill Hub** — install and publish reusable agent skills through the single `metabot` CLI.
 - **Unified Core Console** — token-authenticated Chat, Agents, Memory, Skills, T5T, Teams, CLI Access, and diagnostics, with no second Bridge Web UI to maintain.
 - **Channels and media** — text, rich posts, images, files, audio, smart batching, and exact @Bot routing.
