@@ -78,7 +78,7 @@ export interface Manifest {
 
 export type ProjectStatus = 'green' | 'yellow' | 'red' | 'killed' | 'unknown';
 export type WipStatus = 'queued' | 'doing' | 'done';
-export type AnomalyReason = 'no_owner' | 'stale' | 'kill_red' | 'no_goal' | 'stale_bottleneck';
+export type AnomalyReason = 'no_owner' | 'stale' | 'kill_red' | 'no_goal' | 'no_evaluator' | 'stale_bottleneck';
 
 export interface Evaluator {
   project: string;

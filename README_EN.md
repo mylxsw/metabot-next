@@ -177,7 +177,7 @@ Each bot has its own channel credentials, engine, workspace, and sessions. Bots 
 - **Mobile coding** — edit code, run tests, inspect tools, and follow long tasks from chat.
 - **Agent Teams** — spawn focused teammates, assign parallel work, and keep durable task/run state. [Guide](docs/features/agent-teams.md)
 - **MetaMemory** — searchable knowledge shared across sessions with optional Feishu Wiki sync. [Guide](docs/features/metamemory.md)
-- **T5T and goals** — durable project checkpoints plus supervised multi-turn execution. [Chat Commands](docs/usage/chat-commands.md)
+- **T5T and goals** — durable project checkpoints plus supervised multi-turn execution. The Core Console's T5T board opens on a read-only company-core projection (WBC, VLM Brain, G1 Wuji Teleoperation, and configured platform anchors); switch to all projects when needed. Governance anomalies include a derived `no_evaluator` warning after a 24-hour initialization grace period. [Chat Commands](docs/usage/chat-commands.md)
 - **Skill Hub** — install and publish reusable agent skills through the single `metabot` CLI.
 - **Unified Core Console** — token-authenticated Chat, Agents, Memory, Skills, T5T, Teams, CLI Access, and diagnostics, with no second Bridge Web UI to maintain.
 - **Channels and media** — text, rich posts, images, files, audio, smart batching, and exact @Bot routing.
@@ -204,6 +204,11 @@ Agent Bus messages can target a stable session and be retried safely: use
 deduplicate retries, and `--implicit` to hide run presentation. Personal Core
 defaults to `http://localhost:9200`; configure a remote self-hosted Core with
 `METABOT_CORE_URL` and `METABOT_CORE_TOKEN`.
+
+Session registration accepts only `online`, `resumable`, `offline`, or
+`provisioning`. Sends never silently target an explicitly offline session and
+filter usable sessions before applying the listing cap, so a stale session
+cannot hide a resumable one.
 
 See [Chat Commands](docs/usage/chat-commands.md), the [CLI Reference](docs/reference/cli-metabot.md), and the [REST API](docs/reference/api.md) for the complete surfaces.
 

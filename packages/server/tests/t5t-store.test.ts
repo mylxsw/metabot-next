@@ -282,6 +282,23 @@ describe('T5tStore — anomalies', () => {
     expect(noGoal).toBeUndefined();
   });
 
+  it('flags no_evaluator after the 24h grace period', () => {
+    const cred = mkCred('ameng');
+    store.appendProject({ slug: 'unevaluated', leaderEmail: 'x@x' }, cred);
+    store.appendGoal({ project: 'unevaluated', text: 'set' }, cred);
+    const anomalies = store.computeAnomalies(new Date(Date.now() + 25 * 3600 * 1000));
+    expect(anomalies.find((a) => a.project === 'unevaluated' && a.reason === 'no_evaluator')).toMatchObject({
+      detail: 'no evaluator declared (24h grace)',
+    });
+  });
+
+  it('does not flag no_evaluator during the 24h grace period', () => {
+    const cred = mkCred('ameng');
+    store.appendProject({ slug: 'new-evaluator-later', leaderEmail: 'x@x' }, cred);
+    store.appendGoal({ project: 'new-evaluator-later', text: 'set' }, cred);
+    expect(store.computeAnomalies().some((a) => a.project === 'new-evaluator-later' && a.reason === 'no_evaluator')).toBe(false);
+  });
+
   it('flags stale_bottleneck when WIP in-flight > 3d and no active bottleneck', () => {
     const cred = mkCred('motion');
     store.appendProject({ slug: 'stuck', leaderEmail: 'x@x' }, cred);
