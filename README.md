@@ -200,6 +200,10 @@ Agent Bus 消息可绑定稳定会话并安全重试：使用 `--session <sessio
 `http://localhost:9200`，通过 `METABOT_CORE_URL` 和 `METABOT_CORE_TOKEN` 配置远端
 Personal Core；不会依赖托管服务或内部身份系统。
 
+Session 注册只接受 `online`、`resumable`、`offline`、`provisioning` 四种状态；
+显式离线的 Session 不会被静默投递，且可用 Session 会先在数据库中过滤再截断，
+避免旧的 resumable Session 被新离线记录遮蔽。
+
 完整命令详见[聊天命令](docs/usage/chat-commands.zh.md)、[CLI 参考](docs/reference/cli-metabot.zh.md)和 [REST API](docs/reference/api.zh.md)。
 
 ## 文档

@@ -86,6 +86,12 @@ export function registerSession(deps: MessageRouteDeps, body: Record<string, unk
   if (!agent) return err(404, 'agent_not_found');
   if (cred.role !== 'admin' && agent.ownerCredentialId !== cred.id && agent.ownerName !== cred.ownerName)
     return err(403, 'session_ownership_required');
+  if (
+    body.status !== undefined &&
+    (typeof body.status !== 'string' || !['online', 'resumable', 'offline', 'provisioning'].includes(body.status))
+  ) {
+    return err(400, 'invalid_session_status');
+  }
   const roomId = typeof body.roomId === 'string' ? body.roomId.trim() : '';
   // Bind a provider session back to the central logical session that created
   // this room. The Bridge's local SessionRegistry UUID is not a Bus address.
@@ -138,20 +144,30 @@ export function sendMessage(deps: MessageRouteDeps, body: Record<string, unknown
   if (!text) return err(400, 'message_required');
   const agent = resolveAgent(deps.agents, ref, cred);
   if (!agent) return err(404, 'agent_not_found');
-  const listed = deps.messages.listSessions(agent.id, { limit: 100, offset: 0 }).sessions;
   const requested = typeof body.sessionId === 'string' ? body.sessionId.trim() : '';
   let session = requested ? deps.messages.getSession(requested) : null;
   if (requested && (!session || session.agentId !== agent.id)) return err(404, 'session_not_found');
+  if (session?.status === 'offline') {
+    return err(409, 'session_offline', { sessions: [session], agentId: agent.id, agentName: agent.botName });
+  }
   if (!session) {
-    const usable = listed.filter((s) => s.status === 'online' || s.status === 'resumable');
-    if (usable.length > 1)
-      return err(409, 'session_required', { sessions: usable, agentId: agent.id, agentName: agent.botName });
-    if (usable.length === 1) session = usable[0]!;
-    else if (listed.length > 0 && listed.every((s) => s.status === 'offline'))
-      return err(409, 'session_offline', { sessions: listed, agentId: agent.id, agentName: agent.botName });
-    else if (listed.length === 1 && listed[0]!.status === 'provisioning') session = listed[0]!;
-    else if (listed.some((s) => s.status === 'provisioning'))
-      return err(409, 'session_provisioning', { sessions: listed, agentId: agent.id, agentName: agent.botName });
+    // Filter before applying the result cap so old resumable sessions cannot
+    // be hidden by a burst of newer offline sessions.
+    const usable = deps.messages.listSessions(agent.id, { limit: 100, statuses: ['online', 'resumable'] });
+    if (usable.total > 1)
+      return err(409, 'session_required', { sessions: usable.sessions, agentId: agent.id, agentName: agent.botName });
+    if (usable.total === 1) session = usable.sessions[0]!;
+    else {
+      const pending = deps.messages.listSessions(agent.id, { limit: 100, statuses: ['provisioning'] });
+      if (pending.total > 1)
+        return err(409, 'session_provisioning', { sessions: pending.sessions, agentId: agent.id, agentName: agent.botName });
+      if (pending.total === 1) session = pending.sessions[0]!;
+      else {
+        const listed = deps.messages.listSessions(agent.id, { limit: 100 });
+        if (listed.total > 0)
+          return err(409, 'session_offline', { sessions: listed.sessions, agentId: agent.id, agentName: agent.botName });
+      }
+    }
   }
   const from = senderRef(cred);
   const idempotencyKey = typeof body.idempotencyKey === 'string' ? body.idempotencyKey.trim() : '';

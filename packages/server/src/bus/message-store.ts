@@ -116,17 +116,19 @@ export class MessageStore {
 
   listSessions(
     agentId: string,
-    options: { limit?: number; offset?: number } = {},
+    options: { limit?: number; offset?: number; statuses?: MessageSessionStatus[] } = {},
   ): { sessions: MessageSession[]; total: number } {
     const limit = Math.max(1, Math.min(100, options.limit ?? 20));
     const offset = Math.max(0, options.offset ?? 0);
+    const statuses = options.statuses ?? [];
+    const where = `agent_id = ?${statuses.length ? ` AND status IN (${statuses.map(() => '?').join(',')})` : ''}`;
+    const params = [agentId, ...statuses];
     const total = Number(
-      (this.db.prepare('SELECT COUNT(*) AS n FROM message_sessions WHERE agent_id = ?').get(agentId) as { n: number })
-        .n,
+      (this.db.prepare(`SELECT COUNT(*) AS n FROM message_sessions WHERE ${where}`).get(...params) as { n: number }).n,
     );
     const rows = this.db
-      .prepare('SELECT * FROM message_sessions WHERE agent_id = ? ORDER BY updated_at DESC, id LIMIT ? OFFSET ?')
-      .all(agentId, limit, offset) as RawSession[];
+      .prepare(`SELECT * FROM message_sessions WHERE ${where} ORDER BY updated_at DESC, id LIMIT ? OFFSET ?`)
+      .all(...params, limit, offset) as RawSession[];
     return { sessions: rows.map(mapSession), total };
   }
 

@@ -205,6 +205,11 @@ deduplicate retries, and `--implicit` to hide run presentation. Personal Core
 defaults to `http://localhost:9200`; configure a remote self-hosted Core with
 `METABOT_CORE_URL` and `METABOT_CORE_TOKEN`.
 
+Session registration accepts only `online`, `resumable`, `offline`, or
+`provisioning`. Sends never silently target an explicitly offline session and
+filter usable sessions before applying the listing cap, so a stale session
+cannot hide a resumable one.
+
 See [Chat Commands](docs/usage/chat-commands.md), the [CLI Reference](docs/reference/cli-metabot.md), and the [REST API](docs/reference/api.md) for the complete surfaces.
 
 ## Documentation
