@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 const DEFAULT_ORIGIN = 'http://127.0.0.1:58627';
-const START_TIMEOUT_MS = 15_000;
+const START_TIMEOUT_MS = 30_000;
 const REQUEST_TIMEOUT_MS = 30_000;
 
 interface KimiEnvelope<T> {
@@ -416,7 +416,7 @@ export class KimiDaemonClient {
     if (!isLoopbackHostname(url.hostname)) {
       throw new KimiDaemonError(`Kimi Code server is unavailable at ${this.origin}`);
     }
-    const args = ['server', 'run', '--port', url.port || '58627', '--keep-alive'];
+    const args = ['web', '--port', url.port || '58627', '--no-open'];
     const child = spawn(this.executable, args, {
       env: { ...process.env, ...(this.apiKey ? { KIMI_API_KEY: this.apiKey } : {}) },
       stdio: 'ignore',
