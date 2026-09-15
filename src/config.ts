@@ -188,6 +188,8 @@ export interface BotConfig extends BotConfigBase {
   feishu: {
     appId: string;
     appSecret: string;
+    /** Lark global apps must use the Lark API/WebSocket domain. */
+    domain?: 'feishu' | 'lark';
   };
   /** When true, respond to all messages in group chats without requiring @mention. */
   groupNoMention?: boolean;
@@ -333,6 +335,8 @@ export interface FeishuBotJsonEntry extends EngineJsonFields {
   memoryPublic?: boolean;
   feishuAppId: string;
   feishuAppSecret: string;
+  /** Use "lark" for apps created at open.larksuite.com; defaults to "feishu". */
+  larkDomain?: 'feishu' | 'lark';
   defaultWorkingDirectory: string;
   maxTurns?: number;
   maxBudgetUsd?: number;
@@ -364,6 +368,7 @@ function feishuBotFromJson(entry: FeishuBotJsonEntry): BotConfig {
     feishu: {
       appId: entry.feishuAppId,
       appSecret: entry.feishuAppSecret,
+      domain: entry.larkDomain,
     },
     claude: buildClaudeConfig(entry),
   };

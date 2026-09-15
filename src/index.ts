@@ -86,6 +86,7 @@ async function startFeishuBot(
   const client = new lark.Client({
     appId: botConfig.feishu.appId,
     appSecret: botConfig.feishu.appSecret,
+    domain: botConfig.feishu.domain === 'lark' ? lark.Domain.Lark : lark.Domain.Feishu,
     disableTokenCache: false,
   });
 
@@ -143,6 +144,7 @@ async function startFeishuBot(
   const wsClient = new lark.WSClient({
     appId: botConfig.feishu.appId,
     appSecret: botConfig.feishu.appSecret,
+    domain: botConfig.feishu.domain === 'lark' ? lark.Domain.Lark : lark.Domain.Feishu,
     loggerLevel: lark.LoggerLevel.info,
     agent: localAgent,
     ...wsRecovery,
