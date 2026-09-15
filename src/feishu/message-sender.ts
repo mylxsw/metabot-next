@@ -1,6 +1,8 @@
 import * as fs from 'node:fs';
 import type * as lark from '@larksuiteoapi/node-sdk';
 import type { Logger } from '../utils/logger.js';
+import { feishuConversationId, parseFeishuConversation } from './conversation.js';
+import { getReplyMessageId } from '../bridge/reply-context.js';
 
 export class MessageSender {
   private chatOwnerCache = new Map<string, { ownerId?: string; expiresAt: number }>();
@@ -10,16 +12,27 @@ export class MessageSender {
     private logger: Logger,
   ) {}
 
+  private async sendMessage(chatId: string, content: string, msgType: string) {
+    const destination = parseFeishuConversation(chatId);
+    const messageId = getReplyMessageId(chatId) || destination.rootMessageId;
+    const response = messageId
+      ? await this.client.im.v1.message.reply({
+        path: { message_id: messageId },
+        data: { content, msg_type: msgType, reply_in_thread: true },
+      })
+      : await this.client.im.v1.message.create({
+        params: { receive_id_type: 'chat_id' },
+        data: { receive_id: destination.chatId, content, msg_type: msgType },
+      });
+    if (response?.code) {
+      throw new Error(`Feishu message delivery failed (${response.code}): ${response.msg}`);
+    }
+    return response;
+  }
+
   async sendCard(chatId: string, cardContent: string): Promise<string | undefined> {
     try {
-      const resp = await this.client.im.v1.message.create({
-        params: { receive_id_type: 'chat_id' },
-        data: {
-          receive_id: chatId,
-          content: cardContent,
-          msg_type: 'interactive',
-        },
-      });
+      const resp = await this.sendMessage(chatId, cardContent, 'interactive');
 
       const messageId = resp?.data?.message_id;
       if (!messageId) {
@@ -42,6 +55,44 @@ export class MessageSender {
     } catch (err) {
       this.logger.error({ err, messageId }, 'Failed to update card');
       return false;
+    }
+  }
+
+  async getMessageConversation(chatId: string, messageId: string): Promise<string | undefined> {
+    try {
+      const response = await this.client.im.v1.message.get({ path: { message_id: messageId } });
+      const item = response?.data?.items?.[0];
+      if (response?.code || item?.chat_id !== chatId) return undefined;
+      return feishuConversationId({
+        chatId, messageId, chatType: '', text: '', userId: '',
+        rootMessageId: item.root_id, parentMessageId: item.parent_id, threadId: item.thread_id,
+      });
+    } catch (err) {
+      this.logger.warn({ err, messageId }, 'Could not resolve card conversation');
+      return undefined;
+    }
+  }
+
+  async getMessageText(chatId: string, messageId: string): Promise<string | undefined> {
+    try {
+      const response = await this.client.im.v1.message.get({ path: { message_id: messageId } });
+      const item = response?.data?.items?.[0];
+      if (response?.code || item?.chat_id !== chatId || !item.body?.content) return undefined;
+      const content: unknown = JSON.parse(item.body.content);
+      const texts: string[] = [];
+      const visit = (value: unknown, depth: number): void => {
+        if (depth > 20 || !value || typeof value !== 'object') return;
+        if (Array.isArray(value)) { value.forEach(child => visit(child, depth + 1)); return; }
+        const node = value as Record<string, unknown>;
+        if (typeof node.text === 'string') texts.push(node.text);
+        if (typeof node.content === 'string') texts.push(node.content);
+        for (const child of Object.values(node)) if (typeof child === 'object') visit(child, depth + 1);
+      };
+      visit(content, 0);
+      return texts.length ? `Referenced message (available text only):\n${texts.join('\n').slice(0, 24000)}` : undefined;
+    } catch (err) {
+      this.logger.warn({ err, messageId }, 'Could not read the thread origin');
+      return undefined;
     }
   }
 
@@ -106,14 +157,7 @@ export class MessageSender {
 
   async sendImage(chatId: string, imageKey: string): Promise<boolean> {
     try {
-      await this.client.im.v1.message.create({
-        params: { receive_id_type: 'chat_id' },
-        data: {
-          receive_id: chatId,
-          content: JSON.stringify({ image_key: imageKey }),
-          msg_type: 'image',
-        },
-      });
+      await this.sendMessage(chatId, JSON.stringify({ image_key: imageKey }), 'image');
       return true;
     } catch (err) {
       this.logger.error({ err, chatId, imageKey }, 'Failed to send image');
@@ -149,14 +193,7 @@ export class MessageSender {
 
   async sendFile(chatId: string, fileKey: string): Promise<boolean> {
     try {
-      await this.client.im.v1.message.create({
-        params: { receive_id_type: 'chat_id' },
-        data: {
-          receive_id: chatId,
-          content: JSON.stringify({ file_key: fileKey }),
-          msg_type: 'file',
-        },
-      });
+      await this.sendMessage(chatId, JSON.stringify({ file_key: fileKey }), 'file');
       return true;
     } catch (err) {
       this.logger.error({ err, chatId, fileKey }, 'Failed to send file');
@@ -172,14 +209,7 @@ export class MessageSender {
 
   async sendAudio(chatId: string, fileKey: string): Promise<boolean> {
     try {
-      await this.client.im.v1.message.create({
-        params: { receive_id_type: 'chat_id' },
-        data: {
-          receive_id: chatId,
-          content: JSON.stringify({ file_key: fileKey }),
-          msg_type: 'audio',
-        },
-      });
+      await this.sendMessage(chatId, JSON.stringify({ file_key: fileKey }), 'audio');
       return true;
     } catch (err) {
       this.logger.error({ err, chatId, fileKey }, 'Failed to send audio');
@@ -232,14 +262,7 @@ export class MessageSender {
 
   async sendText(chatId: string, text: string): Promise<void> {
     try {
-      await this.client.im.v1.message.create({
-        params: { receive_id_type: 'chat_id' },
-        data: {
-          receive_id: chatId,
-          content: JSON.stringify({ text }),
-          msg_type: 'text',
-        },
-      });
+      await this.sendMessage(chatId, JSON.stringify({ text }), 'text');
     } catch (err) {
       this.logger.error({ err, chatId }, 'Failed to send text');
     }
