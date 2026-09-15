@@ -1,6 +1,8 @@
 export interface ApiContext {
   botName: string;
   chatId: string;
+  /** Platform chat ID when the MetaBot conversation address includes a topic. */
+  transportChatId?: string;
   /** Session-level engine selected for this chat. */
   engine?: 'claude' | 'kimi' | 'codex';
   /** Current engine session id when one already exists; diagnostic only. */
@@ -29,10 +31,13 @@ export function buildMetaBotApiPromptContext(apiContext: ApiContext): string {
   return [
     '## Current MetaBot Context',
     `Agent: ${botName}`,
-    `Chat ID: ${chatId}`,
+    `Chat ID: ${compactContextValue(apiContext.transportChatId, chatId)}`,
+    ...(apiContext.transportChatId && apiContext.transportChatId !== apiContext.chatId
+      ? [`Conversation address: ${chatId} (use this for MetaBot session, task and schedule commands)`]
+      : []),
     `Engine: ${apiContext.engine ?? 'default'}`,
     `Session ID: ${sessionId}`,
-    'Session ID is diagnostic and may change after reset or an engine switch. Schedules always target Agent + Chat ID.',
+    'Session ID is diagnostic and may change after reset or an engine switch. Schedules target Agent + conversation address (Chat ID when no topic is present).',
     '',
     'Schedule in this chat:',
     `- One-time: \`metabot schedule add ${botName} ${chatId} <delaySeconds> "<prompt>"\``,

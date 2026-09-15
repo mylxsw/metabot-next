@@ -1,3 +1,6 @@
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   MessageBridge,
@@ -7,6 +10,7 @@ import {
   formatSpontaneousCardBody,
   resolvePersistentExecutorEnvDefault,
 } from '../src/bridge/message-bridge.js';
+import { feishuConversationId } from '../src/feishu/conversation.js';
 import { getReplyMessageId } from '../src/bridge/reply-context.js';
 import { CodexCommandController } from '../src/bridge/codex-command-controller.js';
 import { DEFAULT_CODEX_GOAL_MAX_ITERATIONS } from '../src/engines/index.js';
@@ -930,5 +934,61 @@ describe('resolvePersistentExecutorEnvDefault', () => {
     expect(resolvePersistentExecutorEnvDefault('no')).toBe(true);
     expect(resolvePersistentExecutorEnvDefault('disabled')).toBe(true);
     expect(resolvePersistentExecutorEnvDefault('truee')).toBe(true);
+  });
+});
+
+
+describe('Feishu topic session isolation', () => {
+  it.each(['group', 'p2p'])('isolates %s sessions, concurrent tasks, reset and initial context', async (chatType) => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'topic-session-'));
+    vi.stubEnv('SESSION_STORE_DIR', directory);
+    const sender = makeSender();
+    const origin = vi.fn(async (id: string) => id === a ? 'User: root question\nAssistant: root answer' : undefined);
+    const bridge = new MessageBridge({ ...makeConfig(), name: `isolation-${chatType}` }, mockLogger, { ...sender, getThreadContext: origin }) as any;
+    const incoming = (root: string | undefined, text: string, userId = 'u1') => {
+      const msg = { chatId: `chat-isolation-${chatType}`, messageId: 'incoming-' + text, chatType, userId, text, rootMessageId: root };
+      return { ...msg, chatId: feishuConversationId(msg) };
+    };
+    const a = incoming('root-a', 'first').chatId;
+    const b = incoming('root-b', 'first').chatId;
+    const main = incoming(undefined, 'first').chatId;
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    bridge.runOneTurn = vi.fn(async (id: string, _engine: string, opts: { prompt: string }) => ({
+      stream: (async function* () {
+        if (id === a && opts.prompt.endsWith('first')) await gate;
+        yield { type: 'result', subtype: 'success', session_id: `session-${id}`, result: 'done' };
+      })(),
+      finish: vi.fn(), resolveQuestion: vi.fn(),
+    }));
+    try {
+      const first = bridge.handleMessage(incoming('root-a', 'first'));
+      await vi.waitFor(() => expect(bridge.runOneTurn).toHaveBeenCalledTimes(1));
+      await bridge.handleMessage(incoming('root-a', 'follow-up', 'u2'));
+      expect(bridge.messageQueues.get(a)).toHaveLength(1);
+      await bridge.handleMessage(incoming('root-b', 'other-topic'));
+      await bridge.handleMessage(incoming(undefined, 'main-chat'));
+      expect(bridge.runOneTurn.mock.calls.map((call: unknown[]) => call[0])).toEqual([a, b, main]);
+      await bridge.handleMessage(incoming('root-b', '/stop'));
+      expect(bridge.isChatBusy(a)).toBe(true);
+      expect(bridge.messageQueues.get(a)).toHaveLength(1);
+      release();
+      await first;
+      await vi.waitFor(() => expect(bridge.runOneTurn).toHaveBeenCalledTimes(4));
+      await vi.waitFor(() => expect(bridge.isChatBusy(a)).toBe(false));
+      const prompts = bridge.runOneTurn.mock.calls.map((call: any[]) => call[2].prompt);
+      expect(prompts[0]).toContain('root answer');
+      expect(prompts.slice(1).join('\n')).not.toContain('root answer');
+      expect(bridge.getSessionManager().getSession(a).sessionId).toBe(`session-${a}`);
+      expect(bridge.getSessionManager().getSession(b).sessionId).toBe(`session-${b}`);
+      expect(bridge.getSessionManager().getSession(main).sessionId).toBe(`session-${main}`);
+      await bridge.handleMessage(incoming('root-a', '/reset'));
+      expect(bridge.getSessionManager().getSession(a).sessionId).toBeUndefined();
+      expect(bridge.getSessionManager().getSession(b).sessionId).toBe(`session-${b}`);
+      expect(bridge.getSessionManager().getSession(main).sessionId).toBe(`session-${main}`);
+      await bridge.handleMessage(incoming('root-a', 'after-reset'));
+      expect(bridge.runOneTurn.mock.calls.at(-1)[2].prompt).not.toContain('root answer');
+      expect(origin.mock.calls.filter(([id]) => id === a)).toHaveLength(1);
+    } finally { release(); bridge.destroy(); vi.unstubAllEnvs(); fs.rmSync(directory, { recursive: true, force: true }); }
   });
 });

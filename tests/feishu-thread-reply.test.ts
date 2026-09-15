@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type * as lark from '@larksuiteoapi/node-sdk';
 import { MessageSender } from '../src/feishu/message-sender.js';
 import { FeishuSenderAdapter } from '../src/feishu/feishu-sender-adapter.js';
+import { feishuConversationId } from '../src/feishu/conversation.js';
 import { withReplyContext } from '../src/bridge/reply-context.js';
 import { createLogger } from '../src/utils/logger.js';
 import type { IncomingMessage } from '../src/types.js';
@@ -18,6 +19,16 @@ function setup() {
 }
 
 describe('Feishu thread delivery', () => {
+  it('routes persisted conversation addresses without an active incoming-message context', async () => {
+    const { sender, reply, create } = setup();
+    const id = feishuConversationId({ ...message, rootMessageId: 'root' });
+    await sender.sendText(id, 'scheduled reply');
+    expect(reply).toHaveBeenCalledWith({ path: { message_id: 'root' }, data: {
+      content: JSON.stringify({ text: 'scheduled reply' }), msg_type: 'text', reply_in_thread: true,
+    } });
+    expect(create).not.toHaveBeenCalled();
+  });
+
   it.each(['group', 'p2p'])('keeps cards, notices, questions, text and media in a %s thread', async (chatType) => {
     const { sender, adapter, create, reply } = setup();
     const card = { status: 'running' as const, userPrompt: 'hello', responseText: '', toolCalls: [] };

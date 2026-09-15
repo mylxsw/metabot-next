@@ -13,6 +13,7 @@ vi.mock('@larksuiteoapi/node-sdk', () => ({
   },
 }));
 
+import { feishuConversationId } from '../src/feishu/conversation.js';
 import { createEventDispatcher } from '../src/feishu/event-handler.js';
 import { FeishuGroupReplyModeStore } from '../src/feishu/group-reply-mode-store.js';
 import { createLogger } from '../src/utils/logger.js';
@@ -101,6 +102,18 @@ function setup(
 }
 
 describe('Feishu group reply mode dispatcher', () => {
+  it('does not attach cached media from another topic', async () => {
+    const ctx = setup();
+    const image = groupImageEvent('media-topic-chat', 'member-1');
+    await ctx.handle({ ...image, message: { ...image.message, root_id: 'root-a' } });
+    const text = groupTextEvent({ text: 'hello', chatId: 'media-topic-chat', userId: 'member-1', mentionedBotOpenId: ctx.botOpenId });
+    await ctx.handle({ ...text, message: { ...text.message, root_id: 'root-b' } });
+    expect(ctx.onMessage.mock.calls[0][0].extraMedia).toBeUndefined();
+    await ctx.handle({ ...text, message: { ...text.message, root_id: 'root-a' } });
+    expect(ctx.onMessage.mock.calls[1][0].extraMedia).toEqual([expect.objectContaining({ imageKey: 'image-key-1' })]);
+    ctx.store.close();
+  });
+
   it.each(['group', 'p2p'])('retains thread metadata in %s messages', async (chatType) => {
     const ctx = setup();
     const event = groupTextEvent({ text: 'hello', chatId: 'thread-chat', mentionedBotOpenId: ctx.botOpenId });
@@ -109,6 +122,7 @@ describe('Feishu group reply mode dispatcher', () => {
     } });
     expect(ctx.onMessage).toHaveBeenCalledWith(expect.objectContaining({
       messageId: event.message.message_id, chatType,
+      chatId: feishuConversationId({ messageId: event.message.message_id, chatId: 'thread-chat', chatType, userId: 'u', text: '', rootMessageId: 'root-1' }),
       parentMessageId: 'parent-1', rootMessageId: 'root-1', threadId: 'thread-1',
     }));
     ctx.store.close();

@@ -9,6 +9,8 @@ export interface UserSession {
   sessionId: string | undefined;
   /** Engine that owns sessionId. Engine session stores are not interchangeable. */
   sessionIdEngine?: EngineName;
+  /** Origin context was consumed or explicitly cleared with /reset. */
+  threadContextInitialized?: boolean;
   workingDirectory: string;
   lastUsed: number;
   /** Cumulative token usage across all queries in this session */
@@ -42,6 +44,7 @@ export interface UserSession {
 interface PersistedSession {
   sessionId: string;
   sessionIdEngine?: EngineName;
+  threadContextInitialized?: boolean;
   workingDirectory: string;
   lastUsed: number;
   cumulativeTokens?: number;
@@ -133,6 +136,11 @@ export class SessionManager {
       this.sessions.delete(oldestKey);
       this.logger.debug({ chatId: oldestKey }, 'Evicted oldest session (capacity limit)');
     }
+  }
+
+  markThreadContextInitialized(chatId: string): void {
+    this.getSession(chatId).threadContextInitialized = true;
+    this.saveToDisk();
   }
 
   setSessionId(chatId: string, sessionId: string, engine?: EngineName): void {
@@ -238,6 +246,7 @@ export class SessionManager {
   }
 
   resetSession(chatId: string): void {
+    this.getSession(chatId).threadContextInitialized = true;
     const session = this.sessions.get(chatId);
     if (session) {
       session.sessionId = undefined;
@@ -275,10 +284,11 @@ export class SessionManager {
       const data: Record<string, PersistedSession> = {};
       for (const [chatId, session] of this.sessions) {
         // Persist sessions that have a sessionId, model, engine override, effort override, or active goal
-        if (session.sessionId || session.model || session.engine || session.reasoningEffort || session.activeGoal) {
+        if (session.sessionId || session.model || session.engine || session.reasoningEffort || session.activeGoal || session.threadContextInitialized) {
           data[chatId] = {
             sessionId: session.sessionId || '',
             sessionIdEngine: session.sessionIdEngine,
+            threadContextInitialized: session.threadContextInitialized,
             workingDirectory: session.workingDirectory,
             lastUsed: session.lastUsed,
             cumulativeTokens: session.cumulativeTokens,
@@ -314,6 +324,7 @@ export class SessionManager {
         this.sessions.set(chatId, {
           sessionId: persisted.sessionId || undefined,
           sessionIdEngine: persisted.sessionIdEngine,
+          threadContextInitialized: persisted.threadContextInitialized,
           workingDirectory: persisted.workingDirectory,
           lastUsed: persisted.lastUsed,
           cumulativeTokens: persisted.cumulativeTokens ?? 0,
