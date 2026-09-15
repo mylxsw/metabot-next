@@ -56,6 +56,21 @@ describe('loadConfig', () => {
     expect(cfg.token).toBe('file-tok');
   });
 
+  it('falls back to the metabot-core bootstrap token', () => {
+    fs.mkdirSync(path.join(tmpHome, '.metabot-core', 'data'), { recursive: true });
+    fs.writeFileSync(path.join(tmpHome, '.metabot-core', 'data', 'admin-bootstrap-token.txt'), 'bootstrap-tok\n');
+    const cfg = loadConfig({});
+    expect(cfg.token).toBe('bootstrap-tok');
+  });
+
+  it('prefers ~/.metabot-core/token over the bootstrap token', () => {
+    fs.mkdirSync(path.join(tmpHome, '.metabot-core', 'data'), { recursive: true });
+    fs.writeFileSync(path.join(tmpHome, '.metabot-core', 'data', 'admin-bootstrap-token.txt'), 'bootstrap-tok\n');
+    fs.writeFileSync(path.join(tmpHome, '.metabot-core', 'token'), 'file-tok\n');
+    const cfg = loadConfig({});
+    expect(cfg.token).toBe('file-tok');
+  });
+
   it('throws when no token configured', () => {
     expect(() => loadConfig({})).toThrow(/no token configured/);
   });
