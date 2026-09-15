@@ -166,6 +166,8 @@ Skills、T5T、Teams 和 CLI Access 共用同一 Token 与同一套导航。
 }
 ```
 
+如果应用创建于 Lark 国际版后台（`open.larksuite.com`），在对应的 `feishuBots` 条目中添加 `"larkDomain": "lark"`，API 和 WebSocket 会使用国际版域名；不配置时仍默认使用飞书国内版。
+
 每个 Bot 拥有独立的渠道凭证、引擎、工作区和会话，同时仍可通过 Agent Teams 和 Agent Bus 协作。
 
 ## 包含的能力
