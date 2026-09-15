@@ -31,6 +31,8 @@ vi.mock('../src/scheduler/cron-utils.js', () => ({
 
 const PERSIST_DIR = process.env.SESSION_STORE_DIR || path.join(os.homedir(), '.metabot');
 const PERSIST_FILE = path.join(PERSIST_DIR, 'scheduled-tasks.json');
+const MAX_SETTIMEOUT_MS = 2_147_483_647;
+const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
 function createMockLogger(): Logger {
   return {
@@ -312,6 +314,109 @@ describe('TaskScheduler one-time tasks — persistence', () => {
 // =====================================================================
 
 describe('TaskScheduler one-time tasks — execution', () => {
+  it.each([
+    MAX_SETTIMEOUT_MS - 1,
+    MAX_SETTIMEOUT_MS,
+    MAX_SETTIMEOUT_MS + 1,
+    THIRTY_DAYS_MS,
+    2 * MAX_SETTIMEOUT_MS + 1000,
+  ])('waits until the deadline and fires once for a %i ms delay', async (delay) => {
+    const registry = createMockRegistry();
+    const scheduler = new TaskScheduler(registry, createMockLogger());
+    const task = scheduler.scheduleTask({
+      botName: 'testbot',
+      chatId: 'c',
+      prompt: 'p',
+      delaySeconds: delay / 1000,
+    });
+
+    await vi.advanceTimersByTimeAsync(delay - 1);
+    expect(registry.get).not.toHaveBeenCalled();
+    expect(task.status).toBe('pending');
+    expect(vi.getTimerCount()).toBe(1);
+
+    await vi.advanceTimersByTimeAsync(1);
+    expect(registry.get).toHaveBeenCalledTimes(1);
+    expect(task.status).toBe('completed');
+    expect(vi.getTimerCount()).toBe(0);
+    scheduler.destroy();
+  });
+
+  it.each([
+    [60_000, THIRTY_DAYS_MS],
+    [THIRTY_DAYS_MS, 60_000],
+  ])('reschedules a %i ms delay to %i ms without leaving an old timer', async (originalDelay, newDelay) => {
+    const registry = createMockRegistry();
+    const scheduler = new TaskScheduler(registry, createMockLogger());
+    const task = scheduler.scheduleTask({
+      botName: 'testbot',
+      chatId: 'c',
+      prompt: 'p',
+      delaySeconds: originalDelay / 1000,
+    });
+
+    await vi.advanceTimersByTimeAsync(1000);
+    scheduler.updateTask(task.id, { delaySeconds: newDelay / 1000 });
+    expect(vi.getTimerCount()).toBe(1);
+
+    await vi.advanceTimersByTimeAsync(newDelay - 1);
+    expect(registry.get).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(task.status).toBe('completed');
+
+    await vi.advanceTimersByTimeAsync(originalDelay);
+    expect(registry.get).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(0);
+    scheduler.destroy();
+  });
+
+  it('cancels a long-delay task after its timer has been rearmed', async () => {
+    const registry = createMockRegistry();
+    const scheduler = new TaskScheduler(registry, createMockLogger());
+    const task = scheduler.scheduleTask({
+      botName: 'testbot',
+      chatId: 'c',
+      prompt: 'p',
+      delaySeconds: THIRTY_DAYS_MS / 1000,
+    });
+
+    await vi.advanceTimersByTimeAsync(MAX_SETTIMEOUT_MS);
+    expect(registry.get).not.toHaveBeenCalled();
+    expect(scheduler.cancelTask(task.id)).toBe(true);
+    expect(vi.getTimerCount()).toBe(0);
+
+    await vi.advanceTimersByTimeAsync(THIRTY_DAYS_MS);
+    expect(registry.get).not.toHaveBeenCalled();
+    expect(task.status).toBe('cancelled');
+    scheduler.destroy();
+  });
+
+  it('restores a long-delay task with its original deadline', async () => {
+    const registry = createMockRegistry();
+    const logger = createMockLogger();
+    const first = new TaskScheduler(registry, logger);
+    const task = first.scheduleTask({
+      botName: 'testbot',
+      chatId: 'c',
+      prompt: 'p',
+      delaySeconds: THIRTY_DAYS_MS / 1000,
+    });
+    await vi.advanceTimersByTimeAsync(1000);
+    first.destroy();
+    expect(vi.getTimerCount()).toBe(0);
+
+    const restored = new TaskScheduler(registry, logger);
+    expect(restored.listTasks()[0].executeAt).toBe(task.executeAt);
+    await vi.advanceTimersByTimeAsync(THIRTY_DAYS_MS - 1001);
+    expect(registry.get).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(1);
+    expect(registry.get).toHaveBeenCalledTimes(1);
+    expect(restored.listTasks()).toHaveLength(0);
+    expect(vi.getTimerCount()).toBe(0);
+    restored.destroy();
+  });
+
   it('fires task after delay and calls executeApiTask', async () => {
     const registry = createMockRegistry({ executeSuccess: true });
     const scheduler = new TaskScheduler(registry, createMockLogger());
