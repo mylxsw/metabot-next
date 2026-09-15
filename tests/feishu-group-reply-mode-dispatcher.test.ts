@@ -101,6 +101,19 @@ function setup(
 }
 
 describe('Feishu group reply mode dispatcher', () => {
+  it.each(['group', 'p2p'])('retains thread metadata in %s messages', async (chatType) => {
+    const ctx = setup();
+    const event = groupTextEvent({ text: 'hello', chatId: 'thread-chat', mentionedBotOpenId: ctx.botOpenId });
+    await ctx.handle({ ...event, message: {
+      ...event.message, chat_type: chatType, parent_id: 'parent-1', root_id: 'root-1', thread_id: 'thread-1',
+    } });
+    expect(ctx.onMessage).toHaveBeenCalledWith(expect.objectContaining({
+      messageId: event.message.message_id, chatType,
+      parentMessageId: 'parent-1', rootMessageId: 'root-1', threadId: 'thread-1',
+    }));
+    ctx.store.close();
+  });
+
   it('lets an owner set all mode only through an exact current-bot mention', async () => {
     const chatId = 'chat-owner-all';
     const ctx = setup();

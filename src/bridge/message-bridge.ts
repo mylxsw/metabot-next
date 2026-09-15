@@ -25,6 +25,7 @@ import { listCodexSessions } from '../engines/codex/session-lister.js';
 import { listKimiSessions } from '../engines/kimi/session-lister.js';
 import { ExecutorRegistry } from '../engines/claude/executor-registry.js';
 import { RateLimiter } from './rate-limiter.js';
+import { withReplyContext } from './reply-context.js';
 import { OutputsManager } from './outputs-manager.js';
 import { shouldRemindRestart, markReminded, restartSecondsAgo } from './restart-notice.js';
 import type { RestartTaskSnapshot } from './restart-coordinator.js';
@@ -1653,6 +1654,10 @@ export class MessageBridge {
   }
 
   async handleMessage(msg: IncomingMessage): Promise<void> {
+    return withReplyContext(msg, () => this.handleMessageInContext(msg));
+  }
+
+  private async handleMessageInContext(msg: IncomingMessage): Promise<void> {
     const { chatId, text } = msg;
 
     if (this.restartQuiesceRequestId) {
@@ -2027,6 +2032,10 @@ export class MessageBridge {
   }
 
   private async startQuery(msg: IncomingMessage): Promise<void> {
+    return withReplyContext(msg, () => this.startQueryInContext(msg));
+  }
+
+  private async startQueryInContext(msg: IncomingMessage): Promise<void> {
     const startingTask = this.reserveTaskStart(msg.chatId, msg.text, 'chat', true);
     if (!startingTask) {
       throw new Error(`Chat ${msg.chatId} is busy with another task`);

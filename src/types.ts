@@ -98,6 +98,10 @@ export interface IncomingMessage {
   chatType: string;
   userId: string;
   text: string;
+  /** Feishu reply/thread metadata, available in both group and direct chats. */
+  parentMessageId?: string;
+  rootMessageId?: string;
+  threadId?: string;
   timestamp?: number;
   imageKey?: string;
   fileKey?: string;

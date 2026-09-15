@@ -7,6 +7,7 @@ import {
   formatSpontaneousCardBody,
   resolvePersistentExecutorEnvDefault,
 } from '../src/bridge/message-bridge.js';
+import { getReplyMessageId } from '../src/bridge/reply-context.js';
 import { CodexCommandController } from '../src/bridge/codex-command-controller.js';
 import { DEFAULT_CODEX_GOAL_MAX_ITERATIONS } from '../src/engines/index.js';
 import { classifyBurstSource } from '../src/engines/claude/persistent-executor.js';
@@ -281,7 +282,7 @@ describe('MessageBridge between-turn questions', () => {
     expect(handledTexts).toEqual(['/reset']);
   });
 
-  it('queues a follow-up while the first task is still starting', async () => {
+  it.each(['group', 'p2p'])('queues a follow-up in a %s thread while the first task is still starting', async (chatType) => {
     let releaseInitialCard!: () => void;
     const initialCardGate = new Promise<void>((resolve) => {
       releaseInitialCard = resolve;
@@ -294,9 +295,11 @@ describe('MessageBridge between-turn questions', () => {
     const sender = makeSender();
     const originalSendCard = sender.sendCard.bind(sender);
     let sendCardCalls = 0;
+    const replyTargets: Array<string | undefined> = [];
     sender.sendCard = async (chatId: string, state: CardState) => {
       sendCardCalls += 1;
       if (sendCardCalls === 1) await initialCardGate;
+      replyTargets.push(getReplyMessageId(chatId));
       return originalSendCard(chatId, state);
     };
     const notices: Array<{ title: string; content: string }> = [];
@@ -326,7 +329,8 @@ describe('MessageBridge between-turn questions', () => {
     const first = bridge.handleMessage({
       messageId: 'm1',
       chatId: 'chat-1',
-      chatType: 'private',
+      chatType,
+      threadId: 'thread-first',
       userId: 'u1',
       text: 'first',
     });
@@ -334,7 +338,8 @@ describe('MessageBridge between-turn questions', () => {
     await bridge.handleMessage({
       messageId: 'm2',
       chatId: 'chat-1',
-      chatType: 'private',
+      chatType,
+      threadId: 'thread-second',
       userId: 'u1',
       text: 'second',
     });
@@ -353,6 +358,7 @@ describe('MessageBridge between-turn questions', () => {
 
     expect(bridge.runOneTurn.mock.calls.map((call: any[]) => call[2].prompt)).toEqual(['first', 'second']);
     expect(bridge.messageQueues.has('chat-1')).toBe(false);
+    expect(replyTargets).toEqual(['m1', 'm2']);
     bridge.destroy();
   });
 

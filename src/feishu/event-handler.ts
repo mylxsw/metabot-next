@@ -2,6 +2,7 @@ import * as lark from '@larksuiteoapi/node-sdk';
 import type { BotConfig } from '../config.js';
 import type { Logger } from '../utils/logger.js';
 import { MessageSender } from './message-sender.js';
+import { withReplyContext } from '../bridge/reply-context.js';
 import {
   type FeishuGroupReplyMode,
   FeishuGroupReplyModeStore,
@@ -255,6 +256,11 @@ export function createEventDispatcher(
         const chatId = message.chat_id;
         const chatType = message.chat_type;
         const messageId = message.message_id;
+        const replyMetadata = {
+          ...(typeof message.parent_id === 'string' && message.parent_id ? { parentMessageId: message.parent_id } : {}),
+          ...(typeof message.root_id === 'string' && message.root_id ? { rootMessageId: message.root_id } : {}),
+          ...(typeof message.thread_id === 'string' && message.thread_id ? { threadId: message.thread_id } : {}),
+        };
         const mentions = message.mentions;
 
         let commandText = '';
@@ -290,7 +296,9 @@ export function createEventDispatcher(
               defaultMode: config.groupNoMention || inheritedPrivateLike ? 'all' : 'mention',
               canChangeMode,
               store: groupReplyModeStore,
-              sendNotice: onGroupReplyModeNotice,
+              sendNotice: (noticeChatId, title, content, color) => withReplyContext({
+                messageId, chatId, chatType, userId, text: commandText, ...replyMetadata,
+              }, () => onGroupReplyModeNotice(noticeChatId, title, content, color)),
             });
             logger.info({ chatId, userId, botName: config.name }, 'Handled group reply mode command');
             return;
@@ -436,7 +444,7 @@ export function createEventDispatcher(
           }
         }
 
-        onMessage({ messageId, chatId, chatType, userId, text, imageKey, fileKey, fileName, extraMedia });
+        onMessage({ messageId, chatId, chatType, userId, text, ...replyMetadata, imageKey, fileKey, fileName, extraMedia });
       } catch (err) {
         logger.error({ err }, 'Error handling message event');
       }
