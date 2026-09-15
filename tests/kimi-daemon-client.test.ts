@@ -2,6 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { spawn } from 'node:child_process';
+import { EventEmitter } from 'node:events';
+
+vi.mock('node:child_process', () => ({ spawn: vi.fn() }));
+
 import { KimiDaemonClient, KimiDaemonError } from '../src/engines/kimi/daemon-client.js';
 
 function response<T>(data: T): Response {
@@ -24,9 +29,31 @@ describe('KimiDaemonClient', () => {
 
   afterEach(async () => {
     vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+    vi.mocked(spawn).mockReset();
     if (previousHome === undefined) delete process.env.KIMI_CODE_HOME;
     else process.env.KIMI_CODE_HOME = previousHome;
     await rm(home, { recursive: true, force: true });
+  });
+
+  it('starts the web daemon without opening a browser and allows more than 15 seconds', async () => {
+    const child = Object.assign(new EventEmitter(), { unref: vi.fn() });
+    vi.mocked(spawn).mockReturnValue(child as ReturnType<typeof spawn>);
+    vi.stubGlobal('fetch', vi.fn()
+      .mockRejectedValueOnce(new Error('not running'))
+      .mockResolvedValueOnce(response({ ok: true })));
+    // Probe succeeds 16 seconds after launch: within the 30-second startup window.
+    vi.spyOn(Date, 'now').mockReturnValueOnce(0).mockReturnValue(16_000);
+    await new KimiDaemonClient({ executable: '/test/kimi', serverUrl: 'http://127.0.0.1:58628' }).ensureRunning();
+    expect(spawn).toHaveBeenCalledWith('/test/kimi', ['web', '--port', '58628', '--no-open'],
+      expect.objectContaining({ detached: true, stdio: 'ignore' }));
+    expect(child.unref).toHaveBeenCalledOnce();
+  });
+
+  it('does not spawn a daemon when one is already healthy', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response({ ok: true })));
+    await new KimiDaemonClient().ensureRunning();
+    expect(spawn).not.toHaveBeenCalled();
   });
 
   it('uses the official prompt queue and steer endpoints', async () => {
