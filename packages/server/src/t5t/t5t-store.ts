@@ -882,6 +882,22 @@ export class T5tStore {
         }
       }
 
+      // Derived-only governance signal: a newly-created project gets the same
+      // 24-hour initialization grace as the no-goal check.
+      if (proj.evaluators.length === 0) {
+        const projCreated = this.getProjectCreatedAt(proj.slug);
+        const withinGrace = projCreated !== null
+          && (now.getTime() - Date.parse(projCreated)) <= NO_GOAL_GRACE_HOURS * 3600 * 1000;
+        if (!withinGrace) {
+          out.push({
+            project: proj.slug,
+            reason: 'no_evaluator',
+            detail: 'no evaluator declared (24h grace)',
+            lastPush: proj.lastPush,
+          });
+        }
+      }
+
       // stale_bottleneck — WIP queued/doing exists for > N days AND no active bottleneck.
       if (proj.bottleneck === null) {
         const wips = this.listWipItems(proj.slug);

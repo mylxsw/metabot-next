@@ -84,10 +84,10 @@ metabot update
 需要固定不可变 Release、不跟随 `latest` 时：
 
 ```bash
-metabot update --package --version 1.3.0
+metabot update --package --version 1.3.2
 ```
 
-固定版本会从 GitHub v1.3.0 Release 下载 `install.sh`、
+固定版本会从 GitHub v1.3.2 Release 下载 `install.sh`、
 `metabot-runtime.tgz` 和 `SHA256SUMS`。Package 更新会验证 runtime SHA256，
 校验完整个人版 Manifest 和语义版本；固定包报告的版本不匹配时会失败关闭。
 

@@ -2,6 +2,8 @@ import * as lark from '@larksuiteoapi/node-sdk';
 import type { BotConfig } from '../config.js';
 import type { Logger } from '../utils/logger.js';
 import { MessageSender } from './message-sender.js';
+import { feishuConversationId } from './conversation.js';
+import { withReplyContext } from '../bridge/reply-context.js';
 import {
   type FeishuGroupReplyMode,
   FeishuGroupReplyModeStore,
@@ -22,7 +24,7 @@ export interface CardActionEvent {
   value: Record<string, unknown>;
 }
 
-export type CardActionHandler = (event: CardActionEvent) => void;
+export type CardActionHandler = (event: CardActionEvent) => void | Promise<void>;
 export type GroupReplyModeNoticeHandler = (
   chatId: string,
   title: string,
@@ -201,7 +203,7 @@ export function createEventDispatcher(
     (dispatcher as unknown as {
       register: (handlers: Record<string, (data: unknown) => unknown>) => void;
     }).register({
-      'card.action.trigger': (data: unknown) => {
+      'card.action.trigger': async (data: unknown) => {
         try {
           const d = data as {
             operator?: { open_id?: string };
@@ -216,7 +218,7 @@ export function createEventDispatcher(
             logger.warn({ data }, 'Card action missing required fields');
             return { toast: { type: 'error', content: 'Invalid card action' } };
           }
-          onCardAction({
+          await onCardAction({
             chatId,
             userId,
             messageId,
@@ -255,6 +257,14 @@ export function createEventDispatcher(
         const chatId = message.chat_id;
         const chatType = message.chat_type;
         const messageId = message.message_id;
+        const replyMetadata = {
+          ...(typeof message.parent_id === 'string' && message.parent_id ? { parentMessageId: message.parent_id } : {}),
+          ...(typeof message.root_id === 'string' && message.root_id ? { rootMessageId: message.root_id } : {}),
+          ...(typeof message.thread_id === 'string' && message.thread_id ? { threadId: message.thread_id } : {}),
+        };
+        const conversationId = feishuConversationId({
+          messageId, chatId, chatType, userId, text: '', ...replyMetadata,
+        });
         const mentions = message.mentions;
 
         let commandText = '';
@@ -290,7 +300,9 @@ export function createEventDispatcher(
               defaultMode: config.groupNoMention || inheritedPrivateLike ? 'all' : 'mention',
               canChangeMode,
               store: groupReplyModeStore,
-              sendNotice: onGroupReplyModeNotice,
+              sendNotice: (noticeChatId, title, content, color) => withReplyContext({
+                messageId, chatId, chatType, userId, text: commandText, ...replyMetadata,
+              }, () => onGroupReplyModeNotice(noticeChatId, title, content, color)),
             });
             logger.info({ chatId, userId, botName: config.name }, 'Handled group reply mode command');
             return;
@@ -312,7 +324,7 @@ export function createEventDispatcher(
               // Cache media messages for later retrieval when user @mentions bot
               const media = parseMediaMessage(message, msgType, logger);
               if (media) {
-                const key = cacheMediaKey(chatId, userId);
+                const key = cacheMediaKey(conversationId, userId);
                 const items = pendingMediaCache.get(key) || [];
                 items.push({ ...media, messageId, ts: Date.now() });
                 pendingMediaCache.set(key, items);
@@ -422,7 +434,7 @@ export function createEventDispatcher(
           logger.info({ chatId, postExtraImageCount: postExtraImages.length }, 'Attached extra images from post');
         }
         if (chatType === 'group') {
-          const cached = getCachedMedia(chatId, userId);
+          const cached = getCachedMedia(conversationId, userId);
           if (cached.length > 0) {
             const cachedMedia = cached.map(m => ({
               messageId: m.messageId,
@@ -431,12 +443,12 @@ export function createEventDispatcher(
               fileName: m.fileName,
             }));
             extraMedia = extraMedia ? [...extraMedia, ...cachedMedia] : cachedMedia;
-            clearCachedMedia(chatId, userId);
+            clearCachedMedia(conversationId, userId);
             logger.info({ chatId, userId, mediaCount: cached.length }, 'Attached cached media to @mention message');
           }
         }
 
-        onMessage({ messageId, chatId, chatType, userId, text, imageKey, fileKey, fileName, extraMedia });
+        onMessage({ messageId, chatId: conversationId, chatType, userId, text, ...replyMetadata, imageKey, fileKey, fileName, extraMedia });
       } catch (err) {
         logger.error({ err }, 'Error handling message event');
       }

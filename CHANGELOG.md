@@ -4,6 +4,27 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.3.2] - 2026-09-15
+
+### Added
+
+- Added isolated Feishu topic conversations for group chats and bot direct messages, including topic-scoped sessions, queues, media, replies, and reset/stop commands.
+- Added optional `larkDomain` configuration for Lark international applications and exposed GPT-6 Astra models in the Codex model picker.
+
+### Fixed
+
+- Fixed long one-time scheduler delays firing early, AskUserQuestion fallback after resumed sessions, Windows Claude executable selection, and Kimi Code 0.28+ daemon startup via `web`.
+- Fixed MetaMemory CLI bootstrap-token discovery, doc-sync cleanup on transient fetch failures, atomic memory writes, and Windows test home isolation.
+- Added a clone-friendly PM2 `BOTS_CONFIG` default.
+
+## [1.3.1] - 2026-09-11
+
+### Fixed
+
+- Fixed the T5T `no_evaluator` anomaly handling with a 24-hour initialization grace period and no persisted metadata.
+- Hardened Agent Bus session safety by validating session status, rejecting sends to offline sessions, and filtering SQL status before pagination and caps.
+- Locked the transitive `fast-uri` dependency to `3.1.7`.
+
 ## [1.3.0] - 2026-07-24
 
 ### Added

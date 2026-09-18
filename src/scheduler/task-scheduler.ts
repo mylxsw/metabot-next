@@ -359,6 +359,18 @@ export class TaskScheduler {
 
   private setTimer(task: ScheduledTask): void {
     const delay = Math.max(0, task.executeAt - Date.now());
+
+    // Node overflows delays longer than ~24.8 days to 1 ms. Wait in chunks
+    // and recalculate the remaining delay before executing the task.
+    if (delay > MAX_SETTIMEOUT_MS) {
+      const timer = setTimeout(() => {
+        this.timers.delete(task.id);
+        this.setTimer(task);
+      }, MAX_SETTIMEOUT_MS);
+      this.timers.set(task.id, timer);
+      return;
+    }
+
     const timer = setTimeout(() => this.fireTask(task.id), delay);
     this.timers.set(task.id, timer);
   }

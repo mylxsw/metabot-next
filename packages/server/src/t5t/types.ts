@@ -14,6 +14,7 @@ export type AnomalyReason =
   | 'stale'
   | 'kill_red'
   | 'no_goal'
+  | 'no_evaluator'
   | 'stale_bottleneck';
 
 export interface Goal {

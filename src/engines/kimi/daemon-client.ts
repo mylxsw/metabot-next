@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 const DEFAULT_ORIGIN = 'http://127.0.0.1:58627';
-const START_TIMEOUT_MS = 15_000;
+const START_TIMEOUT_MS = 30_000;
 const REQUEST_TIMEOUT_MS = 30_000;
 
 export function buildKimiServerArgs(port: string): string[] {

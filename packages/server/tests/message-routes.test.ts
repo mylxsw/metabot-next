@@ -314,4 +314,45 @@ describe('minimal message protocol', () => {
     expect(result.body.agents).toHaveLength(1);
     expect(result.body.hasMore).toBe(false);
   });
+
+  it('rejects invalid session status instead of persisting arbitrary state', async () => {
+    kit = await startTestServer('minimal-session-status-validation');
+    const owner = await issue(kit, 'target-owner', 'target@example.com');
+    kit.handle.agentStore.register({
+      botName: 'target',
+      url: 'inbox:',
+      ownerCredentialId: owner.credentialId,
+      ownerName: 'target@example.com',
+    });
+    const result = await call(kit.baseUrl, 'POST', '/api/messages/sessions', owner.token, {
+      agentId: 'target',
+      status: 'mysterious',
+    });
+    expect(result.status).toBe(400);
+    expect(result.body.error).toBe('invalid_session_status');
+  });
+
+  it('does not enqueue onto an explicitly offline session', async () => {
+    kit = await startTestServer('minimal-session-offline');
+    const sender = await issue(kit, 'sender', 'sender@example.com');
+    const owner = await issue(kit, 'target-owner', 'target@example.com');
+    const agent = kit.handle.agentStore.register({
+      botName: 'target',
+      url: 'inbox:',
+      ownerCredentialId: owner.credentialId,
+      ownerName: 'target@example.com',
+    });
+    const session = await call(kit.baseUrl, 'POST', '/api/messages/sessions', owner.token, {
+      agentId: agent.id,
+      status: 'offline',
+    });
+    expect(session.status).toBe(201);
+    const result = await call(kit.baseUrl, 'POST', '/api/messages', sender.token, {
+      agentId: agent.id,
+      sessionId: session.body.session.id,
+      message: 'must wait for resume',
+    });
+    expect(result.status).toBe(409);
+    expect(result.body.error).toBe('session_offline');
+  });
 });

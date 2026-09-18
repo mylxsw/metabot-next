@@ -5,6 +5,12 @@ import type { CardState } from '../types.js';
  * Implemented by each IM platform (Feishu, Telegram, etc.).
  */
 export interface IMessageSender {
+  /** Actual platform chat ID, distinct from a topic conversation address. */
+  getTransportChatId?(conversationId: string): string;
+
+  /** Seed a new topic with its referenced turn, without importing another session. */
+  getThreadContext?(conversationId: string): Promise<string | undefined>;
+
   /** Send a new streaming card/message for a CardState. Returns messageId for subsequent updates. */
   sendCard(chatId: string, state: CardState): Promise<string | undefined>;
 

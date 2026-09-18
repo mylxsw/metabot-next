@@ -1781,7 +1781,7 @@ print_help() {
   echo "  Process control:"
   echo "    metabot update            Auto: git checkout pulls; package install downloads release"
   echo "    metabot update --package  Refresh from the latest GitHub Release package"
-  echo "    metabot update --package --version 1.3.0  Install one immutable release"
+  echo "    metabot update --package --version 1.3.2  Install one immutable release"
   echo "    metabot update --git      Git pull, rebuild, and restart"
   echo "    metabot start      Start MetaBot with PM2"
   echo "    metabot stop       Stop MetaBot"

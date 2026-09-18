@@ -5,11 +5,13 @@ import { formatRelative } from '../lib/format';
 import { StatusPill } from '../components/t5t/StatusPill';
 import { AnomalyZone } from '../components/t5t/AnomalyZone';
 import { T5TTimeline } from '../components/t5t/T5TTimeline';
+import { corePortfolioProjects } from '../components/t5t/board-utils';
 
 export function T5tBoard() {
   const [board, setBoard] = useState<BoardResponse | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [showKilled, setShowKilled] = useState(false);
+  const [view, setView] = useState<'core' | 'all'>('core');
 
   useEffect(() => {
     let live = true;
@@ -22,17 +24,16 @@ export function T5tBoard() {
     return () => { live = false; };
   }, []);
 
-  const visibleProjects = useMemo(() => {
-    if (!board) return [];
-    return showKilled
-      ? board.projects
-      : board.projects.filter((p) => p.status !== 'killed');
-  }, [board, showKilled]);
-
   const killedCount = useMemo(() => {
     if (!board) return 0;
     return board.projects.filter((p) => p.status === 'killed').length;
   }, [board]);
+
+  const projectsForView = useMemo(() => {
+    if (!board) return [];
+    const projects = view === 'core' ? corePortfolioProjects(board.projects) : board.projects;
+    return showKilled ? projects : projects.filter((p) => p.status !== 'killed');
+  }, [board, showKilled, view]);
 
   return (
     <div className="main">
@@ -44,6 +45,10 @@ export function T5tBoard() {
         <div style={{ padding: '0 18px', color: 'var(--bone-300)', fontSize: 11, lineHeight: 1.6 }}>
           T5T board · read-only. Push entries with{' '}
           <code style={{ color: 'var(--amber)' }}>metabot t5t push</code>.
+          <div style={{ marginTop: 10 }}>
+            <button type="button" onClick={() => setView('core')} disabled={view === 'core'}>company core</button>{' '}
+            <button type="button" onClick={() => setView('all')} disabled={view === 'all'}>all projects</button>
+          </div>
         </div>
       </aside>
       <div className="content">
@@ -68,7 +73,7 @@ export function T5tBoard() {
 
             <div className="section">
               <h2>
-                projects <span className="count">{visibleProjects.length}</span>
+                {view === 'core' ? 'company core' : 'projects'} <span className="count">{projectsForView.length}</span>
                 {killedCount > 0 && (
                   <button
                     type="button"
@@ -88,10 +93,10 @@ export function T5tBoard() {
                   </button>
                 )}
               </h2>
-              {visibleProjects.length === 0 ? (
+              {projectsForView.length === 0 ? (
                 <div className="t5t-card muted">尚无项目</div>
               ) : (
-                visibleProjects.map((p) => (
+                projectsForView.map((p) => (
                   <Link
                     key={p.slug}
                     to={`/t5t/${encodeURIComponent(p.slug)}`}

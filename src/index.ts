@@ -1,3 +1,4 @@
+import * as os from 'node:os';
 import * as https from 'node:https';
 import * as path from 'node:path';
 import { once } from 'node:events';
@@ -7,6 +8,7 @@ import { createLogger, type Logger } from './utils/logger.js';
 import { createEventDispatcher } from './feishu/event-handler.js';
 import { FeishuGroupReplyModeStore } from './feishu/group-reply-mode-store.js';
 import { MessageSender } from './feishu/message-sender.js';
+import { FeishuTurnStore } from './feishu/turn-store.js';
 import { FeishuSenderAdapter } from './feishu/feishu-sender-adapter.js';
 import { resolveFeishuWsRecoveryOptions } from './feishu/ws-recovery.js';
 import { MessageBridge } from './bridge/message-bridge.js';
@@ -84,6 +86,7 @@ async function startFeishuBot(
   const client = new lark.Client({
     appId: botConfig.feishu.appId,
     appSecret: botConfig.feishu.appSecret,
+    domain: botConfig.feishu.domain === 'lark' ? lark.Domain.Lark : lark.Domain.Feishu,
     disableTokenCache: false,
   });
 
@@ -108,7 +111,9 @@ async function startFeishuBot(
 
   // Create sender and bridge (FeishuSenderAdapter wraps the Feishu-specific MessageSender)
   const rawSender = new MessageSender(client, botLogger);
-  const sender = new FeishuSenderAdapter(rawSender);
+  const sender = new FeishuSenderAdapter(rawSender, new FeishuTurnStore(
+    path.join(process.env.SESSION_STORE_DIR || path.join(os.homedir(), '.metabot'), 'feishu-turns', botConfig.name),
+  ), botLogger);
   const bridge = new MessageBridge(botConfig, botLogger, sender);
 
   // Create event dispatcher wired to the bridge
@@ -122,10 +127,13 @@ async function startFeishuBot(
     },
     botOpenId,
     rawSender,
-    (event) => {
-      bridge.handleCardAction(event).catch((err) => {
-        botLogger.error({ err, event }, 'Unhandled error in card action handler');
-      });
+    async (event) => {
+      const conversationId = await sender.resolveCardConversation(event.chatId, event.messageId);
+      if (!conversationId) {
+        botLogger.warn({ messageId: event.messageId }, 'Ignoring card action with unresolved conversation');
+        return;
+      }
+      await bridge.handleCardAction({ ...event, chatId: conversationId });
     },
     groupReplyModeStore,
     (chatId, title, content, color) => sender.sendTextNotice(chatId, title, content, color),
@@ -136,6 +144,7 @@ async function startFeishuBot(
   const wsClient = new lark.WSClient({
     appId: botConfig.feishu.appId,
     appSecret: botConfig.feishu.appSecret,
+    domain: botConfig.feishu.domain === 'lark' ? lark.Domain.Lark : lark.Domain.Feishu,
     loggerLevel: lark.LoggerLevel.info,
     agent: localAgent,
     ...wsRecovery,

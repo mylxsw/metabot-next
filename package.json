@@ -1,6 +1,6 @@
 {
   "name": "metabot",
-  "version": "1.3.0",
+  "version": "1.3.2",
   "metabotEdition": "personal",
   "description": "MetaBot Personal Edition — use Codex and Kimi Code from IM channels and the local Web UI",
   "main": "dist/index.js",

@@ -19,7 +19,7 @@ MetaBot 安装器自动安装到 `~/.local/bin/metabot`。
 ```bash
 metabot update                                  # Package 安装：最新 GitHub Release
 metabot update --package                        # 强制使用最新 GitHub Release 包
-metabot update --package --version 1.3.0        # 固定不可变 Release v1.3.0
+metabot update --package --version 1.3.2        # 固定不可变 Release v1.3.2
 metabot update --git                            # 强制 git pull + 构建 + 重启
 metabot start                       # 启动（PM2）
 metabot stop                        # 停止
@@ -35,7 +35,7 @@ metabot status                      # PM2 进程状态
 Release。源码 checkout 会被自动识别并保留 Git 更新路径；用 `--package`
 可以强制进行 Release 覆盖。
 
-`metabot update --package --version 1.3.0` 选择不可变 v1.3.0 资源而不是
+`metabot update --package --version 1.3.2` 选择不可变 v1.3.2 资源而不是
 `latest`。Package 更新依次执行：
 
 1. 从最新或固定 GitHub Release 下载 `install.sh`、`metabot-runtime.tgz` 和 `SHA256SUMS`。
