@@ -193,6 +193,14 @@ interface CodexApiPricing {
 const CODEX_API_PRICING: Readonly<Record<string, CodexApiPricing>> = {
   'gpt-5.6': { input: 5, cachedInput: 0.5, output: 30 },
   'gpt-5.6-sol': { input: 5, cachedInput: 0.5, output: 30 },
+  'gpt-6-sol': {
+    input: 2,
+    cachedInput: 0.2,
+    output: 10,
+    longContextThreshold: 272_000,
+    longContextInputMultiplier: 2,
+    longContextOutputMultiplier: 1.5,
+  },
   'gpt-6-astra': {
     input: 10,
     cachedInput: 1,

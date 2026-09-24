@@ -116,12 +116,14 @@ describe('CommandHandler /help', () => {
     expect(handled).toBe(false);
   });
 
-  it('lists Fable 5 as the default Claude model option', async () => {
+  it('lists the current Claude 5 model options with pricing', async () => {
     const { handler, notices } = buildHandler();
     await handler.handle({ ...helpMessage(), text: '/model list' });
     const body = notices[0].content;
-    expect(body).toContain('claude-fable-5');
-    expect(body).toContain('Fable 5');
+    expect(body).toContain('claude-opus-5-5');
+    expect(body).toContain('claude-fable-5-1');
+    expect(body).toContain('claude-sonnet-5');
+    expect(body).toContain('$0.25 cache read');
     expect(body).toContain('native 1M context');
   });
 });

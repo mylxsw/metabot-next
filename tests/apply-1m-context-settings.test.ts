@@ -18,10 +18,19 @@ describe('apply1MContextSettings', () => {
     expect(env.CLAUDE_CODE_AUTO_COMPACT_WINDOW).toBe('200000');
   });
 
-  it('leaves Fable 5 on its native Claude Code context settings', () => {
+  it.each(['claude-fable-5-1', 'claude-opus-5-5', 'claude-sonnet-5'])(
+    'leaves %s on its native Claude Code context settings',
+    (model) => {
+      const q: Record<string, unknown> = { model };
+      apply1MContextSettings(q);
+      expect(q.betas).toBeUndefined();
+      expect(q.env).toBeUndefined();
+    },
+  );
+
+  it('keeps the previous Fable 5 alias on its native Claude Code context settings', () => {
     const q: Record<string, unknown> = { model: 'claude-fable-5' };
     apply1MContextSettings(q);
-    expect(q.betas).toBeUndefined();
     expect(q.env).toBeUndefined();
   });
 

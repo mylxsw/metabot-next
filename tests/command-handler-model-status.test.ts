@@ -190,6 +190,9 @@ describe('CommandHandler /model', () => {
   it('lists claude models on /model list when engine is claude', async () => {
     const { handler, notices } = buildHandler({ engine: 'claude' });
     await handler.handle(msg('/model list'));
+    expect(notices[0].content).toContain('claude-opus-5-5');
+    expect(notices[0].content).toContain('claude-fable-5-1');
+    expect(notices[0].content).toContain('claude-sonnet-5');
     expect(notices[0].content).toContain('claude-opus-4-8');
     expect(notices[0].content).toContain('claude-sonnet-4-6');
     expect(notices[0].content).toContain('claude-haiku-4-5');
@@ -206,6 +209,7 @@ describe('CommandHandler /model', () => {
     const { handler, notices } = buildHandler({ engine: 'codex' });
     await handler.handle(msg('/model list'));
     expect(notices[0].content).toContain('gpt-6-astra');
+    expect(notices[0].content).toContain('gpt-6-sol');
     expect(notices[0].content).toContain('gpt-5.6');
     expect(notices[0].content).toContain('gpt-5.6-terra');
     expect(notices[0].content).toContain('gpt-5.6-luna');

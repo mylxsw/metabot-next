@@ -158,8 +158,8 @@ function createSpawnFn(explicitApiKey?: string): (options: SpawnOptions) => Spaw
  *     to the API. Belt-and-braces for API-key auth modes where the SDK
  *     may not auto-infer the beta from the suffix alone.
  *
- *   - Fable 5 has native 1M context in Claude Code, so leave its env alone
- *     and let the CLI use the model's default window.
+ *   - Current Claude 5 models have native 1M context in Claude Code, so leave
+ *     their env alone and let the CLI use each model's default window.
  *
  *   - Without `[1m]` on legacy 1M-capable Opus/Sonnet models: keep the model
  *     at the standard 200K window. We set
@@ -188,11 +188,11 @@ function createSpawnFn(explicitApiKey?: string): (options: SpawnOptions) => Spaw
  * suffix detection sees the actually-effective model, not the bot default.
  */
 export const DEFAULT_AUTO_COMPACT_WINDOW = '200000';
-const FABLE_5_MODEL_RE = /^claude-fable-5(?:$|\[)/;
+const NATIVE_1M_CLAUDE_MODEL_RE = /^claude-(?:fable-5(?:-1)?|opus-5-5|sonnet-5)(?:$|\[)/;
 
 export function apply1MContextSettings(queryOptions: Record<string, unknown>): void {
   const model = queryOptions.model as string | undefined;
-  if (model && FABLE_5_MODEL_RE.test(model)) {
+  if (model && NATIVE_1M_CLAUDE_MODEL_RE.test(model)) {
     return;
   }
   if (model?.includes('[1m]')) {

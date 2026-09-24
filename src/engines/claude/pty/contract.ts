@@ -302,7 +302,7 @@ export interface SynthesizeResultArgs {
   resultText?: string;
   isError?: boolean;
   numTurns?: number;
-  /** Real model name (from the assistant jsonl records), e.g. claude-fable-5. */
+  /** Real model name (from the assistant jsonl records), e.g. claude-fable-5-1. */
   model?: string;
   usage?: {
     inputTokens?: number;

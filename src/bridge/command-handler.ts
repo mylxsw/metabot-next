@@ -400,7 +400,9 @@ export class CommandHandler {
     if (normalized === 'list' || normalized === 'ls') {
       const active = session.model || botDefault;
       const claudeModels = [
-        { id: 'claude-fable-5', label: 'Fable 5', note: 'Latest Claude Code model · 1M context · 128k max output · adaptive thinking' },
+        { id: 'claude-opus-5-5', label: 'Opus 5.5', note: '$4 input · $0.20 cache read · $20 output / MTok · native 1M context' },
+        { id: 'claude-fable-5-1', label: 'Fable 5.1', note: '$10 input · $0.25 cache read · $50 output / MTok · native 1M context' },
+        { id: 'claude-sonnet-5', label: 'Sonnet 5', note: '$2 input · $0.20 cache read · $10 output / MTok · native 1M context' },
         { id: 'claude-opus-4-8', label: 'Opus 4.8', note: 'High-capability legacy default · 200k context · 128k max output' },
         { id: 'claude-opus-4-8[1m]', label: 'Opus 4.8 (1M)', note: '1M context window' },
         { id: 'claude-opus-4-7', label: 'Opus 4.7', note: '200k context' },
@@ -416,7 +418,8 @@ export class CommandHandler {
         { id: 'kimi-code/kimi-for-coding-highspeed', label: 'Kimi for Coding Highspeed', note: 'Low-latency coding model when enabled for your account' },
       ];
       const codexModels = [
-        { id: 'gpt-6-astra', label: 'GPT 6 Astra', note: 'Flagship Codex model · persistent context across windows (Codex ≥0.153)' },
+        { id: 'gpt-6-astra', label: 'GPT 6 Astra', note: '$10 input · $1 cached input · $50 output / MTok · 1.05M context' },
+        { id: 'gpt-6-sol', label: 'GPT 6 Sol', note: '$2 input · $0.20 cached input · $10 output / MTok · 1.05M context' },
         { id: 'gpt-6-astra-pro', label: 'GPT 6 Astra Pro', note: 'Higher-capability Astra tier for Pro/Business/Enterprise accounts' },
         { id: 'gpt-5.6', label: 'GPT 5.6', note: 'General GPT-5.6 Codex model' },
         { id: 'gpt-5.6-sol', label: 'GPT 5.6 Sol', note: 'Flagship GPT-5.6 capability model' },
@@ -651,11 +654,11 @@ export class CommandHandler {
   private exampleModelsForEngine(engine: EngineName): string {
     switch (engine) {
       case 'claude':
-        return '`claude-fable-5`, `claude-opus-4-8`, `claude-sonnet-4-6`, `claude-haiku-4-5`';
+        return '`claude-opus-5-5`, `claude-fable-5-1`, `claude-sonnet-5`, `claude-haiku-4-5`';
       case 'kimi':
         return '`kimi-code/k3`, `kimi-code/kimi-for-coding-highspeed`';
       case 'codex':
-        return '`gpt-6-astra`, `gpt-6-astra-pro`, `gpt-5.6`, `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`';
+        return '`gpt-6-astra`, `gpt-6-sol`, `gpt-6-astra-pro`, `gpt-5.6`, `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`';
     }
   }
 

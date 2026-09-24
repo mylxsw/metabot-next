@@ -27,8 +27,8 @@ const ENGINE_OPTIONS: Array<{ value: ChatEngine; label: string; defaultModel: st
 ];
 
 const COMMON_MODELS: Record<ChatEngine, string[]> = {
-  claude: ['', 'claude-fable-5', 'claude-opus-4-8', 'claude-sonnet-4-6'],
-  codex: ['', 'gpt-5.5', 'gpt-5.5-codex', 'gpt-5.2-codex'],
+  claude: ['', 'claude-opus-5-5', 'claude-fable-5-1', 'claude-sonnet-5', 'claude-haiku-4-5'],
+  codex: ['', 'gpt-6-astra', 'gpt-6-sol', 'gpt-5.6', 'gpt-5.6-sol', 'gpt-5.5'],
   kimi: ['', 'kimi-for-coding', 'kimi-k2'],
 };
 
