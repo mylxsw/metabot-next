@@ -140,6 +140,8 @@ describe('Telegram config', () => {
             defaultWorkingDirectory: dir,
             groupNoMention: true,
             allowedUserIds: ['7554625724'],
+            model: 'coding/auto',
+            claudeContextWindow: 1_000_000,
           },
         ],
       }),
@@ -149,5 +151,7 @@ describe('Telegram config', () => {
     const config = loadAppConfig().telegramBots[0];
     expect(config.groupNoMention).toBe(true);
     expect(config.allowedUserIds).toEqual(['7554625724']);
+    expect(config.claude.model).toBe('coding/auto');
+    expect(config.claude.contextWindow).toBe(1_000_000);
   });
 });

@@ -6,6 +6,7 @@ import type {
   ToolCall,
   PendingQuestion,
 } from '../../feishu/card-builder.js';
+import { estimateClaudeApiEquivalentCostUsd } from './pricing.js';
 
 const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.svg', '.tiff']);
 
@@ -263,10 +264,22 @@ export class StreamProcessor {
     if (message.modelUsage) {
       const models = Object.keys(message.modelUsage);
       if (models.length > 0) {
-        // Primary model is the one with highest cost
-        const primaryModel = models.reduce((a, b) =>
-          (message.modelUsage![a].costUSD ?? 0) >= (message.modelUsage![b].costUSD ?? 0) ? a : b
-        );
+        const estimatedCosts = new Map<string, number>();
+        for (const model of models) {
+          const estimated = estimateClaudeApiEquivalentCostUsd(model, message.modelUsage[model]);
+          if (estimated !== undefined) estimatedCosts.set(model, estimated);
+        }
+        // A gateway or subscription-backed SDK can report zero cost. In that
+        // case show an API-equivalent estimate from the real per-model usage.
+        if (!(this.costUsd != null && this.costUsd > 0) && estimatedCosts.size > 0) {
+          this.costUsd = [...estimatedCosts.values()].reduce((sum, value) => sum + value, 0);
+        }
+        // Primary model is the one with highest reported or estimated cost.
+        const primaryModel = models.reduce((a, b) => {
+          const aCost = message.modelUsage![a].costUSD || estimatedCosts.get(a) || 0;
+          const bCost = message.modelUsage![b].costUSD || estimatedCosts.get(b) || 0;
+          return aCost >= bCost ? a : b;
+        });
         const mu = message.modelUsage[primaryModel];
         this._model = primaryModel;
         this._contextWindow = mu.contextWindow;

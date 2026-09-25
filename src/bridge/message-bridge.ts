@@ -690,6 +690,7 @@ export class MessageBridge {
         maxConcurrent,
         defaultApiKey: this.config.claude.apiKey,
         defaultModel: this.config.claude.model,
+        defaultContextWindow: this.config.claude.contextWindow,
         backend: this.config.claude.backend,
       });
       // Stage 3 — every newly added executor gets a spontaneous-activity

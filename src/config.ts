@@ -95,6 +95,8 @@ export interface BotConfigBase {
     maxTurns: number | undefined;
     maxBudgetUsd: number | undefined;
     model: string | undefined;
+    /** Real context window for custom or dynamically routed Claude model aliases. */
+    contextWindow?: number;
     /** Explicit Anthropic API key. When set, child Claude Code processes use this
      *  key instead of ~/.claude/.credentials.json. Supports cc-switch compatibility:
      *  leave unset to let Claude Code resolve auth dynamically. */
@@ -320,6 +322,8 @@ interface EngineJsonFields {
   engine?: EngineName;
   kimi?: KimiJsonConfig;
   codex?: CodexJsonConfig;
+  /** Real Claude context window for custom model aliases such as provider routers. */
+  claudeContextWindow?: number;
   /** Claude turn backend: 'pty' (default) or 'sdk' (legacy opt-out). Overrides env CLAUDE_BACKEND. */
   backend?: 'sdk' | 'pty';
 }
@@ -578,6 +582,7 @@ function buildClaudeConfig(entry: {
   apiKey?: string;
   outputsBaseDir?: string;
   downloadsDir?: string;
+  claudeContextWindow?: number;
   backend?: 'sdk' | 'pty';
 }): BotConfigBase['claude'] {
   const backendEnv = process.env.CLAUDE_BACKEND;
@@ -589,6 +594,8 @@ function buildClaudeConfig(entry: {
       entry.maxBudgetUsd ??
       (process.env.CLAUDE_MAX_BUDGET_USD ? parseFloat(process.env.CLAUDE_MAX_BUDGET_USD) : undefined),
     model: entry.model || process.env.CLAUDE_MODEL || process.env.ANTHROPIC_MODEL || 'claude-fable-5-1',
+    contextWindow: entry.claudeContextWindow
+      ?? (process.env.CLAUDE_CONTEXT_WINDOW ? parseInt(process.env.CLAUDE_CONTEXT_WINDOW, 10) : undefined),
     apiKey: entry.apiKey || undefined,
     outputsBaseDir:
       entry.outputsBaseDir ||

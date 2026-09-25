@@ -76,6 +76,50 @@ describe('StreamProcessor', () => {
     expect(state.durationMs).toBe(1200);
   });
 
+  it('estimates Claude cost when the SDK or gateway reports zero', () => {
+    const p = new StreamProcessor('hi');
+    const state = p.processMessage(msg({
+      type: 'result',
+      subtype: 'success',
+      result: 'Done!',
+      total_cost_usd: 0,
+      modelUsage: {
+        'claude-opus-5-5': {
+          inputTokens: 10_000,
+          cacheReadInputTokens: 80_000,
+          cacheCreationInputTokens: 5_000,
+          outputTokens: 1_000,
+          contextWindow: 1_000_000,
+          costUSD: 0,
+        },
+      },
+    }));
+
+    expect(state.costUsd).toBeCloseTo(0.101, 8);
+    expect(state.model).toBe('claude-opus-5-5');
+    expect(state.contextWindow).toBe(1_000_000);
+  });
+
+  it('prefers a positive SDK-reported cost over the local estimate', () => {
+    const p = new StreamProcessor('hi');
+    const state = p.processMessage(msg({
+      type: 'result',
+      subtype: 'success',
+      result: 'Done!',
+      total_cost_usd: 0.5,
+      modelUsage: {
+        'claude-sonnet-5': {
+          inputTokens: 10_000,
+          outputTokens: 1_000,
+          contextWindow: 1_000_000,
+          costUSD: 0.5,
+        },
+      },
+    }));
+
+    expect(state.costUsd).toBe(0.5);
+  });
+
   it('processes error result message', () => {
     const p = new StreamProcessor('hi');
     const state = p.processMessage(msg({

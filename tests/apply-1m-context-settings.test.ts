@@ -53,11 +53,36 @@ describe('apply1MContextSettings', () => {
     });
   });
 
-  it('handles undefined model as "lacks [1m]"', () => {
-    const q: Record<string, unknown> = {};
-    apply1MContextSettings(q);
-    const env = q.env as Record<string, string>;
-    expect(env.CLAUDE_CODE_DISABLE_1M_CONTEXT).toBe('1');
-    expect(env.CLAUDE_CODE_AUTO_COMPACT_WINDOW).toBe('200000');
+  it('declares an explicit context window for a dynamically routed model', () => {
+    const q: Record<string, unknown> = {
+      model: 'coding/auto',
+      env: { FOO: 'bar' },
+    };
+    apply1MContextSettings(q, 1_000_000);
+    expect(q.betas).toBeUndefined();
+    expect(q.env).toEqual({
+      FOO: 'bar',
+      CLAUDE_CODE_MAX_CONTEXT_TOKENS: '1000000',
+    });
   });
+
+  it('keeps the 1M beta when an explicit context window accompanies an older model', () => {
+    const q: Record<string, unknown> = { model: 'claude-opus-4-8[1m]' };
+    apply1MContextSettings(q, 1_000_000);
+    expect(q.betas).toEqual(['context-1m-2025-08-07']);
+    expect(q.env).toEqual({
+      CLAUDE_CODE_MAX_CONTEXT_TOKENS: '1000000',
+    });
+  });
+
+  it.each([undefined, 'coding/auto', 'provider/latest'])(
+    'leaves dynamic or unknown model %s for the provider to resolve',
+    (model) => {
+      const q: Record<string, unknown> = {};
+      if (model) q.model = model;
+      apply1MContextSettings(q);
+      expect(q.betas).toBeUndefined();
+      expect(q.env).toBeUndefined();
+    },
+  );
 });

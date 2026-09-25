@@ -53,6 +53,8 @@ export interface RegistryOptions {
   idleTimeoutMs?: number;
   /** Default model for new executors. Per-acquire option overrides this. */
   defaultModel?: string;
+  /** Real context window for custom or dynamically routed model aliases. */
+  defaultContextWindow?: number;
   /** Default API key for new executors. */
   defaultApiKey?: string;
   /** Turn backend for new executors: 'pty' (default) or 'sdk' (legacy). */
@@ -261,6 +263,7 @@ export class ExecutorRegistry extends EventEmitter {
       resumeSessionId,
       apiKey: this.opts.defaultApiKey,
       model: effectiveModel,
+      contextWindow: this.opts.defaultContextWindow,
       logger: this.opts.logger,
       idleTimeoutMs: this.opts.idleTimeoutMs ?? DEFAULT_IDLE_TIMEOUT_MS,
       onTeamEvent: opts.onTeamEvent,

@@ -39,6 +39,7 @@ const CLAUDE_ENV_PASSTHROUGH = new Set([
   'CLAUDE_CODE_DISABLE_AUTO_MEMORY',      // toggle auto-memory (project patterns/learnings)
   'CLAUDE_CODE_DISABLE_1M_CONTEXT',       // opt out of Max-tier silent 1M context upgrade
   'CLAUDE_CODE_AUTO_COMPACT_WINDOW',      // hard-cap the auto-compact window (keeps non-[1m] models at 200k)
+  'CLAUDE_CODE_MAX_CONTEXT_TOKENS',       // declare the real window for custom/dynamic model aliases
 ]);
 
 /**
@@ -189,15 +190,30 @@ function createSpawnFn(explicitApiKey?: string): (options: SpawnOptions) => Spaw
  */
 export const DEFAULT_AUTO_COMPACT_WINDOW = '200000';
 const NATIVE_1M_CLAUDE_MODEL_RE = /^claude-(?:fable-5(?:-1)?|opus-5-5|sonnet-5)(?:$|\[)/;
+const LEGACY_1M_CLAUDE_MODEL_RE = /^claude-(?:opus-4-[678]|sonnet-4-6)(?:$|\[)/;
 
-export function apply1MContextSettings(queryOptions: Record<string, unknown>): void {
+export function apply1MContextSettings(
+  queryOptions: Record<string, unknown>,
+  configuredContextWindow?: number,
+): void {
   const model = queryOptions.model as string | undefined;
+  if (model?.includes('[1m]')) {
+    queryOptions.betas = ['context-1m-2025-08-07'];
+  }
+  if (configuredContextWindow && configuredContextWindow > 0) {
+    const existingEnv = (queryOptions.env as Record<string, string> | undefined) ?? {};
+    queryOptions.env = {
+      ...existingEnv,
+      CLAUDE_CODE_MAX_CONTEXT_TOKENS: String(Math.floor(configuredContextWindow)),
+    };
+    return;
+  }
   if (model && NATIVE_1M_CLAUDE_MODEL_RE.test(model)) {
     return;
   }
   if (model?.includes('[1m]')) {
-    queryOptions.betas = ['context-1m-2025-08-07'];
-  } else {
+    return;
+  } else if (model && LEGACY_1M_CLAUDE_MODEL_RE.test(model)) {
     const existingEnv = (queryOptions.env as Record<string, string> | undefined) ?? {};
     queryOptions.env = {
       ...existingEnv,
@@ -276,7 +292,14 @@ export type SDKMessage = {
   num_turns?: number;
   errors?: string[];
   // Model usage from result message (per-model breakdown)
-  modelUsage?: Record<string, { inputTokens: number; outputTokens: number; contextWindow: number; costUSD: number }>;
+  modelUsage?: Record<string, {
+    inputTokens: number;
+    outputTokens: number;
+    cacheReadInputTokens?: number;
+    cacheCreationInputTokens?: number;
+    contextWindow: number;
+    costUSD: number;
+  }>;
   // Stream event fields
   event?: {
     type: string;
@@ -444,7 +467,7 @@ export class ClaudeExecutor {
       queryOptions.allowedTools = options.allowedTools;
     }
 
-    apply1MContextSettings(queryOptions);
+    apply1MContextSettings(queryOptions, this.config.claude.contextWindow);
 
     // AskUserQuestion PreToolUse hook: the SDK marks AskUserQuestion as
     // requiresUserInteraction=true, so in bypassPermissions mode it is denied
@@ -648,6 +671,8 @@ export class ClaudeExecutor {
     this.logger.info({ cwd, hasSession: !!sessionId }, 'Starting Claude execution');
 
     const queryOptions = this.buildQueryOptions(cwd, sessionId, abortController, outputsDir);
+    if (options.model) queryOptions.model = options.model;
+    apply1MContextSettings(queryOptions, this.config.claude.contextWindow);
 
     const stream = query({
       prompt,

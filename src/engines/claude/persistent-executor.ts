@@ -57,6 +57,7 @@ const CLAUDE_ENV_PASSTHROUGH = new Set([
   'CLAUDE_CODE_DISABLE_AUTO_MEMORY',
   'CLAUDE_CODE_DISABLE_1M_CONTEXT',
   'CLAUDE_CODE_AUTO_COMPACT_WINDOW',
+  'CLAUDE_CODE_MAX_CONTEXT_TOKENS',
 ]);
 const AUTH_ENV_VARS = ['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN'];
 
@@ -126,6 +127,8 @@ export interface PersistentExecutorOptions {
   /** Optional explicit API key, otherwise OAuth credentials file is used. */
   apiKey?: string;
   model?: string;
+  /** Real context window for custom or dynamically routed model aliases. */
+  contextWindow?: number;
   logger: Logger;
   /**
    * MetaBot bot/chat context. Stable for the lifetime of the executor
@@ -465,7 +468,7 @@ export class PersistentClaudeExecutor extends EventEmitter {
         append: '\n\n' + appendSections.join('\n\n'),
       };
     }
-    apply1MContextSettings(queryOptions);
+    apply1MContextSettings(queryOptions, this.options.contextWindow);
 
     // Hooks: AskUserQuestion (mirrored from legacy executor — required so
     // that questions can be answered by users via Feishu cards) + Agent
@@ -493,6 +496,7 @@ export class PersistentClaudeExecutor extends EventEmitter {
         cwd: this.options.cwd,
         resume,
         model: this.options.model,
+        env: queryOptions.env as NodeJS.ProcessEnv | undefined,
         systemPrompt: append ? { type: 'preset', preset: 'claude_code', append } : undefined,
         logger: this.options.logger,
         pathToClaudeExecutable: CLAUDE_EXECUTABLE,
