@@ -3,6 +3,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import type { AgentTeamConfig } from './agent-teams/team-store.js';
+import type { OutputMode } from './bridge/steps-emitter.js';
 
 function loadEnvFiles(): void {
   const originalEnv = new Set(Object.keys(process.env));
@@ -153,6 +154,12 @@ export interface BotConfigBase {
     /** Max concurrent executors per bot (LRU-evicted past this). Default 20. */
     maxConcurrent?: number;
   };
+  /**
+   * Per-bot rendering strategy for the streaming card. Sourced from the
+   * JSON entry via {@link EngineJsonFields.outputMode}; see that field for
+   * the contract. Defaults to 'monolog' when omitted.
+   */
+  outputMode?: OutputMode;
 }
 
 export interface VoiceReplyConfig {
@@ -326,6 +333,16 @@ interface EngineJsonFields {
   claudeContextWindow?: number;
   /** Claude turn backend: 'pty' (default) or 'sdk' (legacy opt-out). Overrides env CLAUDE_BACKEND. */
   backend?: 'sdk' | 'pty';
+  /**
+   * Per-bot rendering strategy for the streaming card.
+   *
+   * - 'monolog' (default) — one message per turn, edited in place as the
+   *   agent produces output.
+   * - 'steps'             — each semantically-complete step of the turn
+   *   (tool call → tool result, text block, final summary) becomes its own
+   *   chat bubble.
+   */
+  outputMode?: OutputMode;
 }
 
 export interface FeishuBotJsonEntry extends EngineJsonFields {
@@ -373,6 +390,7 @@ function feishuBotFromJson(entry: FeishuBotJsonEntry): BotConfig {
     ...(entry.engine ? { engine: entry.engine } : {}),
     ...(entry.kimi ? { kimi: entry.kimi } : {}),
     ...(codex ? { codex } : {}),
+    ...(entry.outputMode ? { outputMode: entry.outputMode } : {}),
     feishu: {
       appId: entry.feishuAppId,
       appSecret: entry.feishuAppSecret,
@@ -429,6 +447,7 @@ function telegramBotFromJson(entry: TelegramBotJsonEntry): TelegramBotConfig {
     ...(entry.engine ? { engine: entry.engine } : {}),
     ...(entry.kimi ? { kimi: entry.kimi } : {}),
     ...(codex ? { codex } : {}),
+    ...(entry.outputMode ? { outputMode: entry.outputMode } : {}),
     telegram: {
       botToken: entry.telegramBotToken,
     },
@@ -475,6 +494,7 @@ export function webBotFromJson(entry: WebBotJsonEntry): BotConfigBase {
     ...(entry.engine ? { engine: entry.engine } : {}),
     ...(entry.kimi ? { kimi: entry.kimi } : {}),
     ...(codex ? { codex } : {}),
+    ...(entry.outputMode ? { outputMode: entry.outputMode } : {}),
     claude: buildClaudeConfig(entry),
   };
 }
@@ -509,6 +529,7 @@ function wechatBotFromJson(entry: WechatBotJsonEntry): WechatBotConfig {
     ...(entry.engine ? { engine: entry.engine } : {}),
     ...(entry.kimi ? { kimi: entry.kimi } : {}),
     ...(codex ? { codex } : {}),
+    ...(entry.outputMode ? { outputMode: entry.outputMode } : {}),
     wechat: {
       ilinkBaseUrl: entry.ilinkBaseUrl,
       botToken: entry.wechatBotToken,
@@ -563,6 +584,7 @@ function slackBotFromJson(entry: SlackBotJsonEntry): SlackBotConfig {
     ...(entry.engine ? { engine: entry.engine } : {}),
     ...(entry.kimi ? { kimi: entry.kimi } : {}),
     ...(codex ? { codex } : {}),
+    ...(entry.outputMode ? { outputMode: entry.outputMode } : {}),
     slack: {
       botToken: entry.slackBotToken,
       signingSecret: entry.slackSigningSecret,

@@ -26,6 +26,7 @@ import { listCodexSessions } from '../engines/codex/session-lister.js';
 import { listKimiSessions } from '../engines/kimi/session-lister.js';
 import { ExecutorRegistry } from '../engines/claude/executor-registry.js';
 import { RateLimiter } from './rate-limiter.js';
+import { StepsEmitter, type OutputMode } from './steps-emitter.js';
 import { withReplyContext } from './reply-context.js';
 import { OutputsManager } from './outputs-manager.js';
 import { shouldRemindRestart, markReminded, restartSecondsAgo } from './restart-notice.js';
@@ -122,6 +123,15 @@ interface RunningTask {
   chatId: string;
   source: 'chat' | 'api';
   sendCards: boolean;
+  /**
+   * Per-turn step tracker for the 'steps' output mode. Owns its own
+   * context (which message is currently open, last text length, etc.) and
+   * decides whether the next snapshot should `sendCard` a new message or
+   * `updateCard` the in-flight one. In 'monolog' mode this is still
+   * instantiated (for shape uniformity) but its decisions are short-
+   * circuited to "use the existing message" — i.e. it acts as a no-op.
+   */
+  stepsEmitter: StepsEmitter;
   /** Live snapshot of the active Agent Team, accumulated from team hooks. */
   teamState?: TeamState;
 }
@@ -1211,6 +1221,10 @@ export class MessageBridge {
     const abortController = new AbortController();
     const session = this.sessionManager.getSession(chatId);
     const activeGoal = session.activeGoal;
+    const isStepsMode = this.config.outputMode === 'steps';
+    const stepsEmitter = new StepsEmitter({
+      outputMode: this.config.outputMode ?? 'monolog',
+    });
 
     const initialState: CardState = {
       status: 'thinking',
@@ -1220,13 +1234,21 @@ export class MessageBridge {
       goalCondition: activeGoal,
     };
 
-    const messageId = await this.sender.sendCard(chatId, initialState);
-    if (!messageId) {
-      this.logger.warn({ chatId }, 'MessageBridge: failed to send continuation initial card');
-      // Drain stream so the SDK turn still completes cleanly
-      try { for await (const _msg of handle.stream) { /* drop */ } } catch { /* ignore */ }
-      try { handle.finish(); } catch { /* ignore */ }
-      return;
+    // In 'steps' mode we skip the pre-stream placeholder bubble — the
+    // StepsEmitter will open its own first step bubble on the first streamed
+    // snapshot, and a placeholder would only leave a redundant empty bubble
+    // in the chat history after completion.
+    let messageId = '';
+    if (!isStepsMode) {
+      const sent = await this.sender.sendCard(chatId, initialState);
+      if (!sent) {
+        this.logger.warn({ chatId }, 'MessageBridge: failed to send continuation initial card');
+        // Drain stream so the SDK turn still completes cleanly
+        try { for await (const _msg of handle.stream) { /* drop */ } } catch { /* ignore */ }
+        try { handle.finish(); } catch { /* ignore */ }
+        return;
+      }
+      messageId = sent;
     }
 
     this.continuationTasks.set(chatId, {
@@ -1279,7 +1301,16 @@ export class MessageBridge {
                 : hint,
             };
             try {
-              await this.sender.updateCard(messageId, hintedState);
+              // In steps mode the placeholder messageId is empty, so the hint
+              // update lands on whatever step bubble is currently in flight.
+              const hintTarget = isStepsMode
+                ? (stepsEmitter.getCurrentMessageId() ?? '')
+                : messageId;
+              if (hintTarget) {
+                await this.sender.updateCard(hintTarget, hintedState);
+              } else {
+                await this.sender.sendCard(chatId, hintedState);
+              }
             } catch (err) {
               this.logger.warn({ err, chatId }, 'MessageBridge: continuation hint update failed');
             }
@@ -1297,7 +1328,7 @@ export class MessageBridge {
         if (state.status === 'complete' || state.status === 'error') break;
         rateLimiter.schedule(() => {
           if (!abortController.signal.aborted) {
-            this.sender.updateCard(messageId, this.enrichWithAgentTeams(state, chatId));
+            this.renderContinuationCard(stepsEmitter, chatId, state, messageId, isStepsMode);
           }
         });
       }
@@ -1313,7 +1344,9 @@ export class MessageBridge {
         }
       }
 
-      await this.sendFinalCard(messageId, lastState, chatId);
+      await this.sendFinalCard(messageId, lastState, chatId, {
+        stepsMessageId: stepsEmitter.getCurrentMessageId() ?? undefined,
+      });
       // Intentionally NO sendCompletionNotice here. Continuation turns are
       // between-turn agent activity the user didn't initiate — the card
       // itself (blue → green lifecycle, complete with timestamps in the
@@ -1331,7 +1364,11 @@ export class MessageBridge {
         errorMessage: err?.message || 'Continuation failed',
       };
       try { await rateLimiter.cancelAndWait(); } catch { /* ignore */ }
-      try { await this.sendFinalCard(messageId, errorState, chatId); } catch { /* ignore */ }
+      try {
+        await this.sendFinalCard(messageId, errorState, chatId, {
+          stepsMessageId: stepsEmitter.getCurrentMessageId() ?? undefined,
+        });
+      } catch { /* ignore */ }
     } finally {
       try { handle.finish(); } catch { /* ignore */ }
       if (this.continuationTasks.get(chatId)?.cardMessageId === messageId) {
@@ -1579,6 +1616,106 @@ export class MessageBridge {
       teamState: hasTeamState(state.teamState) ? state.teamState : mapped.teamState,
       backgroundEvents: mergeBackgroundEvents(state.backgroundEvents, mapped.backgroundEvents),
     };
+  }
+
+  /**
+   * Render a streaming snapshot to the user-facing card. In 'monolog' mode
+   * this is a thin wrapper around `updateCard` against the one-and-only
+   * message for this turn. In 'steps' mode the StepsEmitter decides whether
+   * the snapshot belongs to a NEW chat bubble (sendCard → remember messageId)
+   * or the currently-open one (updateCard → in-flight messageId).
+   *
+   * `cardMessageId` is the legacy monolog-mode messageId. The emitter tracks
+   * the steps-mode current messageId internally. Returns the action taken.
+   */
+  private async renderStreamingCard(
+    runningTask: RunningTask,
+    rawState: CardState,
+    cardMessageId: string,
+  ): Promise<'open' | 'update' | 'noop'> {
+    const state = this.enrichWithAgentTeams(rawState, runningTask.chatId);
+    const boundary = runningTask.stepsEmitter.observe(state);
+    if (boundary.action === 'monolog' || boundary.action === 'noop') {
+      // Monolog: keep editing the single message. Noop in steps mode means
+      // there's nothing new worth surfacing (yet).
+      if (boundary.action === 'monolog' && cardMessageId) {
+        await this.sender.updateCard(cardMessageId, state);
+      }
+      return boundary.action === 'monolog' ? 'update' : 'noop';
+    }
+    if (boundary.action === 'open') {
+      const newMessageId = await this.sender.sendCard(runningTask.chatId, state);
+      if (newMessageId) {
+        runningTask.stepsEmitter.recordDispatch(newMessageId);
+        // Don't overwrite `runningTask.cardMessageId` — it's the monolog-mode
+        // placeholder messageId that final-delivery and other monolog-only
+        // paths still reference. The StepsEmitter tracks the steps-mode
+        // current messageId separately via `lastOpenMessageId`.
+      }
+      return 'open';
+    }
+    // 'update'
+    const inFlightMessageId = runningTask.stepsEmitter.getCurrentMessageId()
+      ?? cardMessageId;
+    if (inFlightMessageId) {
+      await this.sender.updateCard(inFlightMessageId, state);
+    }
+    return 'update';
+  }
+
+  /**
+   * Continuation-turn sibling of {@link renderStreamingCard}. The continuation
+   * path doesn't have a RunningTask object (it tracks state via
+   * {@link continuationTasks}), so we accept the StepsEmitter directly.
+   * Behaves identically to renderStreamingCard for the streaming delta path;
+   * the final / error paths are handled separately by `sendFinalCard`.
+   */
+  private renderContinuationCard(
+    emitter: StepsEmitter,
+    chatId: string,
+    rawState: CardState,
+    placeholderMessageId: string,
+    isStepsMode: boolean,
+  ): void {
+    void this.runContinuationCard(emitter, chatId, rawState, placeholderMessageId, isStepsMode).catch((err) => {
+      this.logger.warn({ err, chatId }, 'MessageBridge: continuation card render failed');
+    });
+  }
+
+  private async runContinuationCard(
+    emitter: StepsEmitter,
+    chatId: string,
+    rawState: CardState,
+    placeholderMessageId: string,
+    isStepsMode: boolean,
+  ): Promise<void> {
+    const state = this.enrichWithAgentTeams(rawState, chatId);
+    const boundary = emitter.observe(state);
+    if (boundary.action === 'monolog') {
+      if (placeholderMessageId) {
+        await this.sender.updateCard(placeholderMessageId, state);
+      }
+      return;
+    }
+    if (boundary.action === 'noop') {
+      return;
+    }
+    if (boundary.action === 'open') {
+      if (isStepsMode || !placeholderMessageId) {
+        const newMessageId = await this.sender.sendCard(chatId, state);
+        if (newMessageId) {
+          emitter.recordDispatch(newMessageId);
+        }
+      } else {
+        await this.sender.updateCard(placeholderMessageId, state);
+      }
+      return;
+    }
+    // 'update'
+    const inFlight = emitter.getCurrentMessageId() ?? placeholderMessageId;
+    if (inFlight) {
+      await this.sender.updateCard(inFlight, state);
+    }
   }
 
   /**
@@ -1956,14 +2093,22 @@ export class MessageBridge {
     }
 
     // No more questions — bump the main streaming card so it visibly resumes.
+    // In 'steps' mode the legacy `cardMessageId` is empty, so we target the
+    // most recent step bubble (text-block or tool-start) opened by the
+    // StepsEmitter.
+    const continueTarget = this.config.outputMode === 'steps'
+      ? (task.stepsEmitter.getCurrentMessageId() ?? task.cardMessageId)
+      : task.cardMessageId;
     const currentState = task.processor.getCurrentState();
-    await this.sender.updateCard(task.cardMessageId, {
+    if (continueTarget) {
+      await this.sender.updateCard(continueTarget, {
       ...currentState,
       status: 'running',
       responseText: currentState.responseText
         ? currentState.responseText + `\n\n> **Reply:** ${answerSummary}\n\n_Continuing..._`
         : `> **Reply:** ${answerSummary}\n\n_Continuing..._`,
-    });
+      });
+    }
   }
 
   /** Auto-answer remaining questions when timeout fires. */
@@ -2192,9 +2337,16 @@ export class MessageBridge {
       goalCondition: activeGoal,
     };
 
-    const messageId = await this.sender.sendCard(chatId, initialState);
+    // In 'steps' mode we do NOT pre-open a placeholder bubble. StepsEmitter
+    // opens the first bubble itself when the first real snapshot arrives.
+    // Pre-opening here would leak a redundant "Running…" message that the
+    // final-card update would later mark Complete, producing a duplicate.
+    const isStepsMode = this.config.outputMode === 'steps';
+    const messageId: string = isStepsMode
+      ? ''
+      : (await this.sender.sendCard(chatId, initialState)) ?? '';
 
-    if (!messageId) {
+    if (!isStepsMode && !messageId) {
       this.logger.error('Failed to send initial card, aborting');
       this.cleanupTaskSetup(chatId, imagePath, filePath, extraPaths, outputsDir);
       return;
@@ -2230,9 +2382,12 @@ export class MessageBridge {
       if (!runningTask) return;
       const changed = this.applyTeamEvent(runningTask, event);
       if (changed && !abortController.signal.aborted) {
+        const targetMessageId = this.config.outputMode === 'steps'
+          ? (runningTask.stepsEmitter.getCurrentMessageId() ?? '')
+          : messageId;
         rateLimiter.schedule(() => {
-          if (!abortController.signal.aborted) {
-            this.sender.updateCard(messageId, this.enrichWithAgentTeams({
+          if (!abortController.signal.aborted && targetMessageId) {
+            this.sender.updateCard(targetMessageId, this.enrichWithAgentTeams({
               ...processor.getCurrentState(),
               goalCondition: activeGoal,
               teamState: runningTask.teamState,
@@ -2314,6 +2469,9 @@ export class MessageBridge {
       chatId,
       source: 'chat',
       sendCards: true,
+      stepsEmitter: new StepsEmitter({
+        outputMode: this.config.outputMode ?? 'monolog',
+      }),
     };
     this.releaseTaskStart(chatId, startingTask);
     this.runningTasks.set(chatId, runningTask);
@@ -2499,7 +2657,7 @@ export class MessageBridge {
         if (!abortController.signal.aborted) {
           rateLimiter.schedule(() => {
             if (!abortController.signal.aborted) {
-              this.sender.updateCard(messageId, this.enrichWithAgentTeams(state, chatId));
+              void this.renderStreamingCard(runningTask, state, messageId);
             }
           });
         }
@@ -2551,7 +2709,7 @@ export class MessageBridge {
           const newSid = processor.getSessionId();
           if (newSid) this.sessionManager.setSessionId(chatId, newSid, engineName);
           if (state.status === 'complete' || state.status === 'error') break;
-          rateLimiter.schedule(() => { this.sender.updateCard(messageId, this.enrichWithAgentTeams(state, chatId)); });
+          rateLimiter.schedule(() => { void this.renderStreamingCard(runningTask, state, messageId); });
         }
         await rateLimiter.cancelAndWait();
       }
@@ -2578,12 +2736,14 @@ export class MessageBridge {
           const newSid = processor.getSessionId();
           if (newSid) this.sessionManager.setSessionId(chatId, newSid, engineName);
           if (state.status === 'complete' || state.status === 'error') break;
-          rateLimiter.schedule(() => { this.sender.updateCard(messageId, this.enrichWithAgentTeams(state, chatId)); });
+          rateLimiter.schedule(() => { void this.renderStreamingCard(runningTask, state, messageId); });
         }
         await rateLimiter.cancelAndWait();
       }
 
-      await this.sendFinalCard(messageId, lastState, chatId);
+      await this.sendFinalCard(messageId, lastState, chatId, {
+        stepsMessageId: runningTask.stepsEmitter.getCurrentMessageId() ?? undefined,
+      });
 
       // Audit + cost tracking
       const durationMs = Date.now() - startTime;
@@ -2659,10 +2819,12 @@ export class MessageBridge {
             const newSid = processor.getSessionId();
             if (newSid) this.sessionManager.setSessionId(chatId, newSid, engineName);
             if (state.status === 'complete' || state.status === 'error') break;
-            rateLimiter.schedule(() => { this.sender.updateCard(messageId, this.enrichWithAgentTeams(state, chatId)); });
+            rateLimiter.schedule(() => { void this.renderStreamingCard(runningTask, state, messageId); });
           }
           await rateLimiter.cancelAndWait();
-          await this.sendFinalCard(messageId, lastState, chatId);
+          await this.sendFinalCard(messageId, lastState, chatId, {
+        stepsMessageId: runningTask.stepsEmitter.getCurrentMessageId() ?? undefined,
+      });
 
           const durationMs = Date.now() - startTime;
           this.audit.log({
@@ -2719,7 +2881,9 @@ export class MessageBridge {
         errorMessage: err.message || 'Unknown error',
       };
       await rateLimiter.cancelAndWait();
-      await this.sendFinalCard(messageId, errorState, chatId);
+      await this.sendFinalCard(messageId, errorState, chatId, {
+        stepsMessageId: runningTask.stepsEmitter.getCurrentMessageId() ?? undefined,
+      });
     } finally {
       clearTimeout(timeoutId);
       if (idleTimerId) clearTimeout(idleTimerId);
@@ -2814,7 +2978,11 @@ export class MessageBridge {
     };
 
     let messageId: string | undefined;
-    if (sendCards) {
+    // In 'steps' mode we skip the pre-stream placeholder bubble — the
+    // StepsEmitter will open its own first step bubble on the first
+    // streamed snapshot, and a placeholder would only leave a redundant
+    // empty bubble in the chat history after completion.
+    if (sendCards && this.config.outputMode !== 'steps') {
       messageId = await this.sender.sendCard(chatId, initialState);
     }
 
@@ -2847,10 +3015,14 @@ export class MessageBridge {
     const onTeamEvent = (event: TeamEvent) => {
       if (!runningTask) return;
       const changed = this.applyTeamEvent(runningTask, event);
-      if (changed && sendCards && messageId && !abortController.signal.aborted) {
+      if (changed && sendCards && !abortController.signal.aborted) {
+        const targetMessageId = this.config.outputMode === 'steps'
+          ? (runningTask.stepsEmitter.getCurrentMessageId() ?? '')
+          : messageId;
+        if (!targetMessageId) return;
         rateLimiter.schedule(() => {
           if (!abortController.signal.aborted) {
-            this.sender.updateCard(messageId!, this.enrichWithAgentTeams({
+            this.sender.updateCard(targetMessageId, this.enrichWithAgentTeams({
               ...processor.getCurrentState(),
               goalCondition: activeGoal,
               teamState: runningTask.teamState,
@@ -2908,6 +3080,9 @@ export class MessageBridge {
       chatId,
       source: 'api',
       sendCards,
+      stepsEmitter: new StepsEmitter({
+        outputMode: this.config.outputMode ?? 'monolog',
+      }),
     };
     this.releaseTaskStart(chatId, startingTask);
     this.runningTasks.set(chatId, runningTask);
@@ -3000,9 +3175,9 @@ export class MessageBridge {
           break;
         }
 
-        if (sendCards && messageId) {
+        if (sendCards) {
           rateLimiter.schedule(() => {
-            this.sender.updateCard(messageId!, this.enrichWithAgentTeams(state, chatId));
+            void this.renderStreamingCard(runningTask, state, messageId ?? '');
           });
         }
         options.onUpdate?.(state, effectiveMessageId, false);
@@ -3035,6 +3210,9 @@ export class MessageBridge {
         if (sendCards && messageId) {
           await this.sender.updateCard(messageId, { ...lastState, status: 'running', responseText: retryMsg });
         }
+        // Note: in 'steps' mode we don't have a placeholder messageId, so the
+        // above no-ops; the retry's first streamed snapshot will open its own
+        // step bubble via renderStreamingCard.
 
         const retryHandle = await this.runOneTurn(chatId, engineName, {
           prompt, cwd, abortController, outputsDir, apiContext: buildApiContext(),
@@ -3053,7 +3231,7 @@ export class MessageBridge {
           if (newSid) this.sessionManager.setSessionId(chatId, newSid, engineName);
           if (state.status === 'complete' || state.status === 'error') break;
           if (sendCards && messageId) {
-            rateLimiter.schedule(() => { this.sender.updateCard(messageId!, this.enrichWithAgentTeams(state, chatId)); });
+            rateLimiter.schedule(() => { void this.renderStreamingCard(runningTask, state, messageId!); });
           }
           options.onUpdate?.(state, effectiveMessageId, false);
         }
@@ -3061,7 +3239,9 @@ export class MessageBridge {
       }
 
       if (sendCards && messageId) {
-        await this.sendFinalCard(messageId, lastState, chatId);
+        await this.sendFinalCard(messageId, lastState, chatId, {
+        stepsMessageId: runningTask.stepsEmitter.getCurrentMessageId() ?? undefined,
+      });
       }
       options.onUpdate?.(lastState, effectiveMessageId, true);
 
@@ -3140,7 +3320,9 @@ export class MessageBridge {
           await rateLimiter.cancelAndWait();
 
           if (sendCards && messageId) {
-            await this.sendFinalCard(messageId, lastState, chatId);
+            await this.sendFinalCard(messageId, lastState, chatId, {
+        stepsMessageId: runningTask.stepsEmitter.getCurrentMessageId() ?? undefined,
+      });
           }
           options.onUpdate?.(lastState, effectiveMessageId, true);
 
@@ -3174,7 +3356,9 @@ export class MessageBridge {
           errorMessage: err.message || 'Unknown error',
         };
         await rateLimiter.cancelAndWait();
-        await this.sendFinalCard(messageId, errorState, chatId);
+        await this.sendFinalCard(messageId, errorState, chatId, {
+          stepsMessageId: runningTask.stepsEmitter.getCurrentMessageId() ?? undefined,
+        });
       }
 
       const catchErrorState: CardState = {
@@ -3216,14 +3400,34 @@ export class MessageBridge {
    * Send the final card update with exponential backoff retry.
    * Retries with exponential backoff (2s → 4s → 8s). If all retries fail,
    * sends a plain text fallback so the user at least sees the result.
+   *
+   * Accepts a RunningTask (instead of a bare messageId) so we can pick the
+   * correct message to update in 'steps' mode: the most recent step bubble
+   * tracked by StepsEmitter, rather than the legacy single-bubble
+   * cardMessageId. In 'monolog' mode behaviour is unchanged — the original
+   * cardMessageId is patched in place.
    */
-  private async sendFinalCard(messageId: string, state: CardState, chatId?: string): Promise<void> {
+  private async sendFinalCard(
+    messageId: string,
+    state: CardState,
+    chatId?: string,
+    options?: { stepsMessageId?: string },
+  ): Promise<void> {
+    // In 'steps' mode the running task has its own messageId tracker.
+    // Prefer it over the legacy placeholder messageId to avoid patching a
+    // bubble that was never opened in steps mode (would otherwise surface
+    // as a duplicate "Complete" bubble next to the real one).
+    const effectiveMessageId = options?.stepsMessageId ?? messageId;
+    if (!effectiveMessageId) {
+      this.logger.warn({ chatId, status: state.status }, 'sendFinalCard: no messageId to update; skipping');
+      return;
+    }
     await sendFinalCardWithRetry({
       sender: this.sender,
       config: this.config,
       logger: this.logger,
       sessionManager: this.sessionManager,
-      messageId,
+      messageId: effectiveMessageId,
       state: this.enrichWithAgentTeams(state, chatId),
       chatId,
     });
