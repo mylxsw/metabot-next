@@ -216,10 +216,101 @@ export class CommandHandler {
         return true;
       }
 
+      case '/compact': {
+        await this.handleCompactCommand(msg);
+        return true;
+      }
+
       default:
         // Unrecognized /xxx commands — not handled here, pass through to Claude
         return false;
     }
+  }
+
+  /**
+   * `/compact` — engine-specific compaction trigger.
+   *
+   * - **Claude**: the slash command is a native REPL command, so we return
+   *   `false` and let the message-bridge pass it through to `typePrompt`,
+   *   which we already patched to use the `\r + sleep + \x18\x13` submission
+   *   sequence that Claude Code v2.1.x recognises for slash-menu commits.
+   *   The REPL echoes `Compacting conversation…` / `Crunched for Ns · done`
+   *   as a model turn, which the bridge forwards back to Telegram.
+   *
+   * - **Codex**: the `codex exec` headless path exposes no manual compact
+   *   trigger — `/compact` is only a slash command in the interactive TUI
+   *   (`codex` / `codex resume --last`), and the JSON-RPC path is the
+   *   `codex app-server` `thread/compact/start` method, neither of which
+   *   the headless executor speaks. Forwarding the literal `/compact`
+   *   string causes the model to politely refuse ("I can't trigger context
+   *   compaction from this chat"), which wastes a turn and tokens. So
+   *   here we acknowledge the user's intent, explain the constraint, and
+   *   remind them that Codex compacts automatically once its
+   *   `model_post_turn_compact_threshold_percent` threshold is crossed.
+   *
+   * Returns true only when the command was fully handled. Claude returns
+   * false so the message-bridge re-routes the literal `/compact` to the REPL.
+   */
+  private async handleCompactCommand(msg: IncomingMessage): Promise<boolean> {
+    const { chatId, userId } = msg;
+    const session = this.sessionManager.getSession(chatId);
+    const activeEngine = session.engine ?? resolveEngineName(this.config);
+
+    this.logger.info(
+      { botName: this.config.name, chatId, userId, engine: activeEngine, sessionId: session.sessionId },
+      '/compact command received',
+    );
+
+    if (activeEngine === 'claude' || activeEngine === 'kimi') {
+      // Let the slash command pass through to the underlying REPL — the
+      // typePrompt patch already handles the v2.1.x submission sequence.
+      this.audit.log({
+        event: 'command',
+        botName: this.config.name,
+        chatId,
+        userId,
+        prompt: '/compact',
+        meta: { engine: activeEngine, action: 'passthrough' },
+      });
+      return false;
+    }
+
+    if (activeEngine === 'codex') {
+      // The Codex exec path has no manual compact trigger. Acknowledge the
+      // user's intent, explain the constraint, and remind them that Codex
+      // compacts automatically once its
+      // `model_post_turn_compact_threshold_percent` threshold is crossed.
+      this.audit.log({
+        event: 'command',
+        botName: this.config.name,
+        chatId,
+        userId,
+        prompt: '/compact',
+        meta: { engine: 'codex', action: 'explain_no_manual_compact' },
+      });
+      await this.sender.sendTextNotice(
+        chatId,
+        'ℹ️ /compact on Codex',
+        [
+          'The Codex CLI (`codex exec`) does not expose a manual `/compact` trigger.',
+          'Codex compacts **automatically** once the post-turn threshold is crossed.',
+          '',
+          'To force compaction now:',
+          '  • Fill the rest of the context window and let Codex compact on its own, or',
+          '  • Switch to the Claude engine with `/model claude` and re-run `/compact` — Claude Code REPL supports it natively.',
+        ].join('\n'),
+        'blue',
+      );
+      return true;
+    }
+
+    await this.sender.sendTextNotice(
+      chatId,
+      '❌ /compact Unsupported',
+      `This chat is on the \`${activeEngine}\` engine. \`/compact\` is currently wired up for Claude and Codex.`,
+      'red',
+    );
+    return true;
   }
 
   private async handleMemoryCommand(chatId: string, args: string): Promise<void> {

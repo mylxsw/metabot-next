@@ -241,13 +241,18 @@ class PtyClaudeSessionImpl implements IPtyClaudeSession {
     if (!this.term || this.disposed) {
       throw new Error('pty-session: cannot submit — claude process exited while typing');
     }
+    // Claude Code REPL accepts Enter (\r) for regular prompts, but slash
+    // commands and certain multi-line draft states require Ctrl+X Ctrl+S
+    // to submit. Send both with a small gap — the first triggers the old
+    // protocol, the second is a harmless no-op if the REPL already accepted
+    // the prompt. This keeps the protocol compatible with both pre-2.1 and
+    // 2.1+ Claude Code REPLs.
     this.term.write('\r');
     await sleep(1500);
-    // Double-Enter safeguard: the TUI sometimes needs a second Enter to submit.
     if (!this.term || this.disposed) {
       throw new Error('pty-session: cannot resubmit — claude process exited after Enter');
     }
-    this.term.write('\r');
+    this.term.write('\x18\x13');
   }
 
   /**

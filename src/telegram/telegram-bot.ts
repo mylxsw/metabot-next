@@ -340,15 +340,60 @@ export async function startTelegramBot(config: TelegramBotConfig, logger: Logger
     });
   });
 
+  // Graceful shutdown — must abort the long-poll socket BEFORE the process
+  // exits, otherwise Telegram keeps the previous getUpdates call registered
+  // as the active consumer and the *next* restart hits 409 Conflict and goes
+  // silently deaf. grammY's bot.stop() does this: it aborts the abort
+  // controller (canceling the in-flight getUpdates) and commits the latest
+  // offset by issuing a final getUpdates with limit=1.
+  //
+  // Without these handlers, `pm2 restart` (SIGINT) and `pm2 stop` (SIGTERM)
+  // would terminate the process while a 30-second getUpdates call is still
+  // in flight on Telegram's side.
+  const stopBot = async (signal: NodeJS.Signals) => {
+    botLogger.info({ signal }, 'Stopping Telegram bot (committing polling offset)...');
+    try {
+      await bot.stop();
+      botLogger.info('Telegram bot stopped cleanly');
+    } catch (err) {
+      botLogger.warn({ err }, 'bot.stop() failed during shutdown');
+    }
+    // Tiny grace so the final getUpdates round-trip completes; without it
+    // Node exits before Telegram processes the offset commit.
+    setTimeout(() => process.exit(0), 200).unref();
+  };
+  process.once('SIGINT', () => void stopBot('SIGINT'));
+  process.once('SIGTERM', () => void stopBot('SIGTERM'));
+
   // Publish native slash-command suggestions without delaying polling or startup.
   void registerTelegramCommands(bot.api, botLogger);
 
-  // Start long polling (non-blocking)
+  // Start long polling (non-blocking). bot.start() returns a promise that
+  // resolves when polling ends; if long polling fails with 401/409 the
+  // promise rejects. Without an explicit catch, Node 22+ would terminate
+  // the process on unhandled rejection, silently taking the bot offline.
+  // Attach a catch that logs and triggers PM2 restart so we don't have to
+  // babysit the bot during deploys or duplicate-token flaps.
+  //
+  // `drop_pending_updates: true` makes Telegram discard any updates that
+  // were queued for a previous (now-dead) long-poll session when this bot
+  // starts up. Without it, an old in-flight getUpdates from a crashed
+  // sibling process can poison the new offset=1 poll with a 409 conflict.
   bot.start({
+    drop_pending_updates: true,
     onStart: (botInfo) => {
       botUsername = resolveTelegramBotUsername(botUsername, botInfo.username);
       botLogger.info('Telegram bot is running (long polling)');
     },
+  }).catch((err) => {
+    botLogger.error(
+      { err: err?.error || err, message: err?.message },
+      'bot.start() rejected — Telegram long polling terminated. The PM2 daemon will restart this process; investigate token conflicts before the next restart.',
+    );
+    // Trigger immediate process exit so PM2 can restart cleanly with a fresh
+    // long-poll offset, rather than holding the process alive in a zombie state
+    // where it accepts no updates.
+    process.exit(1);
   });
 
   botLogger.info(

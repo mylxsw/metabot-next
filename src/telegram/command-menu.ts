@@ -15,6 +15,12 @@ const COMMANDS = [
   { command: 'effort', en: 'Show or set Codex reasoning effort', zh: '查看或设置 Codex 推理强度' },
   { command: 'resume', en: 'List and resume previous sessions', zh: '查看并恢复历史会话' },
   { command: 'memory', en: 'Browse and search the memory library', zh: '浏览和搜索记忆库' },
+  // `/compact` is forwarded as-is to the underlying engine's REPL
+  // (Claude Code or Codex), where it triggers the native context
+  // compaction flow. The bridge does NOT handle it itself — passing
+  // through to the REPL is the entire mechanism.
+  // Listed here so it appears in the Telegram command menu.
+  { command: 'compact', en: 'Compact the conversation context (Claude/Codex)', zh: '压缩当前对话上下文（Claude/Codex）' },
   {
     command: 'group_reply',
     en: 'Show group reply mode; admins can change it',
