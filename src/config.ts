@@ -324,11 +324,31 @@ export interface CodexJsonConfig {
   env?: Record<string, string>;
 }
 
+/**
+ * Claude-specific overrides in bots.json.
+ *
+ * The same fields are also accepted as top-level properties on the bot
+ * entry (`entry.model`, `entry.apiKey`, `entry.outputsBaseDir`, etc.) — both
+ * are read by `buildClaudeConfig` and the nested form wins when both are
+ * set. The nested form mirrors the Codex `codex:` block for symmetry; we
+ * keep both because users naturally reach for `claude: { model: ... }`
+ * after configuring a codex one with `codex: { model: ... }`.
+ */
+export interface ClaudeCliJsonConfig {
+  model?: string;
+  apiKey?: string;
+  outputsBaseDir?: string;
+  downloadsDir?: string;
+  claudeContextWindow?: number;
+  backend?: 'sdk' | 'pty';
+}
+
 /** Fields shared across all bot JSON entries (engine selection and engine overrides). */
 interface EngineJsonFields {
   engine?: EngineName;
   kimi?: KimiJsonConfig;
   codex?: CodexJsonConfig;
+  claude?: ClaudeCliJsonConfig;
   /** Real Claude context window for custom model aliases such as provider routers. */
   claudeContextWindow?: number;
   /** Claude turn backend: 'pty' (default) or 'sdk' (legacy opt-out). Overrides env CLAUDE_BACKEND. */
@@ -606,25 +626,46 @@ function buildClaudeConfig(entry: {
   downloadsDir?: string;
   claudeContextWindow?: number;
   backend?: 'sdk' | 'pty';
+  /**
+   * Optional nested `claude:` block. When present, these fields override
+   * the matching top-level fields on `entry` (so `claude: { model: "..." }`
+   * wins over `model: "..."` at the entry root). Mirrors the `codex:`
+   * block pattern.
+   */
+  claude?: ClaudeCliJsonConfig;
 }): BotConfigBase['claude'] {
   const backendEnv = process.env.CLAUDE_BACKEND;
+  // Merge: nested `claude:` fields take precedence over top-level fields
+  // on the same key. Pick per-field rather than spreading both objects
+  // so an empty string in the nested block (the most common user mistake
+  // — accidentally writing `model: ""` instead of omitting the key) does
+  // not silently fall through to the top-level value.
+  const claude = entry.claude;
+  const model = (claude?.model && claude.model.length > 0 ? claude.model : entry.model);
+  const apiKey = (claude?.apiKey && claude.apiKey.length > 0 ? claude.apiKey : entry.apiKey);
+  const outputsBaseDir = (claude?.outputsBaseDir && claude.outputsBaseDir.length > 0 ? claude.outputsBaseDir : entry.outputsBaseDir);
+  const downloadsDir = (claude?.downloadsDir && claude.downloadsDir.length > 0 ? claude.downloadsDir : entry.downloadsDir);
+  const contextWindow = entry.claudeContextWindow
+    ?? claude?.claudeContextWindow
+    ?? (process.env.CLAUDE_CONTEXT_WINDOW ? parseInt(process.env.CLAUDE_CONTEXT_WINDOW, 10) : undefined);
+  const backend = entry.backend ?? claude?.backend ?? (backendEnv === 'sdk' ? 'sdk' : 'pty');
+
   return {
     defaultWorkingDirectory: expandUserPath(entry.defaultWorkingDirectory),
-    backend: entry.backend ?? (backendEnv === 'sdk' ? 'sdk' : 'pty'),
+    backend,
     maxTurns: entry.maxTurns ?? (process.env.CLAUDE_MAX_TURNS ? parseInt(process.env.CLAUDE_MAX_TURNS, 10) : undefined),
     maxBudgetUsd:
       entry.maxBudgetUsd ??
       (process.env.CLAUDE_MAX_BUDGET_USD ? parseFloat(process.env.CLAUDE_MAX_BUDGET_USD) : undefined),
-    model: entry.model || process.env.CLAUDE_MODEL || process.env.ANTHROPIC_MODEL || 'claude-fable-5-1',
-    contextWindow: entry.claudeContextWindow
-      ?? (process.env.CLAUDE_CONTEXT_WINDOW ? parseInt(process.env.CLAUDE_CONTEXT_WINDOW, 10) : undefined),
-    apiKey: entry.apiKey || undefined,
+    model: model || process.env.CLAUDE_MODEL || process.env.ANTHROPIC_MODEL || 'claude-fable-5-1',
+    contextWindow,
+    apiKey: apiKey || undefined,
     outputsBaseDir:
-      entry.outputsBaseDir ||
+      outputsBaseDir ||
       process.env.OUTPUTS_BASE_DIR ||
       path.join(os.tmpdir(), `metabot-outputs-${os.userInfo().username}`),
     downloadsDir:
-      entry.downloadsDir ||
+      downloadsDir ||
       process.env.DOWNLOADS_DIR ||
       path.join(os.tmpdir(), `metabot-downloads-${os.userInfo().username}`),
   };
