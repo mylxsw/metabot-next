@@ -5,6 +5,7 @@ describe('Claude API-equivalent pricing', () => {
   it.each([
     ['claude-opus-5-5', 0.101],
     ['claude-fable-5-1', 0.2325],
+    ['claude-sonnet-5-5', 0.0585],
     ['claude-sonnet-5', 0.0585],
   ])('estimates %s with input, cache read, cache write, and output tokens', (model, expected) => {
     expect(estimateClaudeApiEquivalentCostUsd(model, {

@@ -402,6 +402,7 @@ export class CommandHandler {
       const claudeModels = [
         { id: 'claude-opus-5-5', label: 'Opus 5.5', note: '$4 input · $0.20 cache read · $20 output / MTok · native 1M context' },
         { id: 'claude-fable-5-1', label: 'Fable 5.1', note: '$10 input · $0.25 cache read · $50 output / MTok · native 1M context' },
+        { id: 'claude-sonnet-5-5', label: 'Sonnet 5.5', note: '$2 input · $0.20 cache read · $2.50 cache write · $10 output / MTok · native 1M context' },
         { id: 'claude-sonnet-5', label: 'Sonnet 5', note: '$2 input · $0.20 cache read · $10 output / MTok · native 1M context' },
         { id: 'claude-opus-4-8', label: 'Opus 4.8', note: 'High-capability legacy default · 200k context · 128k max output' },
         { id: 'claude-opus-4-8[1m]', label: 'Opus 4.8 (1M)', note: '1M context window' },
@@ -654,7 +655,7 @@ export class CommandHandler {
   private exampleModelsForEngine(engine: EngineName): string {
     switch (engine) {
       case 'claude':
-        return '`claude-opus-5-5`, `claude-fable-5-1`, `claude-sonnet-5`, `claude-haiku-4-5`';
+        return '`claude-opus-5-5`, `claude-fable-5-1`, `claude-sonnet-5-5`, `claude-sonnet-5`, `claude-haiku-4-5`';
       case 'kimi':
         return '`kimi-code/k3`, `kimi-code/kimi-for-coding-highspeed`';
       case 'codex':

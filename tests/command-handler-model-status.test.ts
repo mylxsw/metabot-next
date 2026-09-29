@@ -192,6 +192,7 @@ describe('CommandHandler /model', () => {
     await handler.handle(msg('/model list'));
     expect(notices[0].content).toContain('claude-opus-5-5');
     expect(notices[0].content).toContain('claude-fable-5-1');
+    expect(notices[0].content).toContain('claude-sonnet-5-5');
     expect(notices[0].content).toContain('claude-sonnet-5');
     expect(notices[0].content).toContain('claude-opus-4-8');
     expect(notices[0].content).toContain('claude-sonnet-4-6');

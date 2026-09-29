@@ -189,7 +189,7 @@ function createSpawnFn(explicitApiKey?: string): (options: SpawnOptions) => Spaw
  * suffix detection sees the actually-effective model, not the bot default.
  */
 export const DEFAULT_AUTO_COMPACT_WINDOW = '200000';
-const NATIVE_1M_CLAUDE_MODEL_RE = /^claude-(?:fable-5(?:-1)?|opus-5-5|sonnet-5)(?:$|\[)/;
+const NATIVE_1M_CLAUDE_MODEL_RE = /^claude-(?:fable-5(?:-1)?|opus-5-5|sonnet-5(?:-5)?)(?:$|\[)/;
 const LEGACY_1M_CLAUDE_MODEL_RE = /^claude-(?:opus-4-[678]|sonnet-4-6)(?:$|\[)/;
 
 export function apply1MContextSettings(

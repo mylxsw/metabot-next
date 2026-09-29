@@ -122,7 +122,9 @@ describe('CommandHandler /help', () => {
     const body = notices[0].content;
     expect(body).toContain('claude-opus-5-5');
     expect(body).toContain('claude-fable-5-1');
+    expect(body).toContain('claude-sonnet-5-5');
     expect(body).toContain('claude-sonnet-5');
+    expect(body).toContain('$2.50 cache write');
     expect(body).toContain('$0.25 cache read');
     expect(body).toContain('native 1M context');
   });

@@ -17,6 +17,7 @@ interface ClaudeApiPricing {
 const CLAUDE_API_PRICING: Readonly<Record<string, ClaudeApiPricing>> = {
   'claude-opus-5-5': { input: 4, cacheRead: 0.2, cacheWrite: 5, output: 20 },
   'claude-fable-5-1': { input: 10, cacheRead: 0.25, cacheWrite: 12.5, output: 50 },
+  'claude-sonnet-5-5': { input: 2, cacheRead: 0.2, cacheWrite: 2.5, output: 10 },
   'claude-sonnet-5': { input: 2, cacheRead: 0.2, cacheWrite: 2.5, output: 10 },
 };
 
