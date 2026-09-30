@@ -22,6 +22,7 @@ export interface CodexJsonEvent {
 export interface CodexUsage {
   input_tokens?: number;
   cached_input_tokens?: number;
+  cache_write_input_tokens?: number;
   output_tokens?: number;
   total_tokens?: number;
 }
@@ -164,7 +165,11 @@ function estimateCodexApiEquivalentCostUsd(
 
   const inputTokens = Math.max(0, usage.input_tokens ?? 0);
   const cachedInputTokens = Math.min(inputTokens, Math.max(0, usage.cached_input_tokens ?? 0));
-  const uncachedInputTokens = inputTokens - cachedInputTokens;
+  const cacheWriteInputTokens = Math.min(
+    inputTokens - cachedInputTokens,
+    Math.max(0, usage.cache_write_input_tokens ?? 0),
+  );
+  const uncachedInputTokens = inputTokens - cachedInputTokens - cacheWriteInputTokens;
   const outputTokens = Math.max(0, usage.output_tokens ?? 0);
   const usesLongContextPricing =
     pricing.longContextThreshold !== undefined && inputTokens > pricing.longContextThreshold;
@@ -174,6 +179,7 @@ function estimateCodexApiEquivalentCostUsd(
   return (
     (uncachedInputTokens * pricing.input * inputMultiplier +
       cachedInputTokens * pricing.cachedInput * inputMultiplier +
+      cacheWriteInputTokens * (pricing.cacheWrite ?? pricing.input) * inputMultiplier +
       outputTokens * pricing.output * outputMultiplier) /
     1_000_000
   );
@@ -183,6 +189,7 @@ interface CodexApiPricing {
   /** Standard USD price per one million tokens. */
   input: number;
   cachedInput: number;
+  cacheWrite?: number;
   output: number;
   /** Long-context pricing applies only when input tokens exceed this threshold. */
   longContextThreshold?: number;
@@ -193,6 +200,15 @@ interface CodexApiPricing {
 const CODEX_API_PRICING: Readonly<Record<string, CodexApiPricing>> = {
   'gpt-5.6': { input: 5, cachedInput: 0.5, output: 30 },
   'gpt-5.6-sol': { input: 5, cachedInput: 0.5, output: 30 },
+  'gpt-6.1-sol': {
+    input: 2,
+    cachedInput: 0.1,
+    cacheWrite: 2.5,
+    output: 10,
+    longContextThreshold: 272_000,
+    longContextInputMultiplier: 2,
+    longContextOutputMultiplier: 1.5,
+  },
   'gpt-6-sol': {
     input: 2,
     cachedInput: 0.2,

@@ -419,6 +419,7 @@ export class CommandHandler {
         { id: 'kimi-code/kimi-for-coding-highspeed', label: 'Kimi for Coding Highspeed', note: 'Low-latency coding model when enabled for your account' },
       ];
       const codexModels = [
+        { id: 'gpt-6.1-sol', label: 'GPT 6.1 Sol', note: '$2 input · $0.10 cached input · $2.50 cache write · $10 output / MTok · 1.05M context' },
         { id: 'gpt-6-astra', label: 'GPT 6 Astra', note: '$10 input · $1 cached input · $50 output / MTok · 1.05M context' },
         { id: 'gpt-6-sol', label: 'GPT 6 Sol', note: '$2 input · $0.20 cached input · $10 output / MTok · 1.05M context' },
         { id: 'gpt-6-astra-pro', label: 'GPT 6 Astra Pro', note: 'Higher-capability Astra tier for Pro/Business/Enterprise accounts' },
@@ -659,7 +660,7 @@ export class CommandHandler {
       case 'kimi':
         return '`kimi-code/k3`, `kimi-code/kimi-for-coding-highspeed`';
       case 'codex':
-        return '`gpt-6-astra`, `gpt-6-sol`, `gpt-6-astra-pro`, `gpt-5.6`, `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`';
+        return '`gpt-6.1-sol`, `gpt-6-astra`, `gpt-6-sol`, `gpt-6-astra-pro`, `gpt-5.6`, `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`';
     }
   }
 

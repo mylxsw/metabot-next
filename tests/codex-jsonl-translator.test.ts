@@ -127,6 +127,46 @@ describe('Codex JSONL translator', () => {
     expect(result.total_cost_usd).toBeCloseTo(0.156, 8);
   });
 
+  it('estimates API-equivalent cost for gpt-6.1-sol including cache writes', () => {
+    const state = createCodexTranslatorState({ model: 'gpt-6.1-sol', contextWindow: 1_050_000 });
+    const result = translateCodexJsonEvent(
+      {
+        type: 'turn.completed',
+        usage: {
+          input_tokens: 100_000,
+          cached_input_tokens: 80_000,
+          cache_write_input_tokens: 10_000,
+          output_tokens: 10_000,
+          total_tokens: 110_000,
+        },
+      },
+      state,
+    )[0];
+
+    // 10k uncached × $2/M + 80k cached × $0.10/M + 10k cache writes × $2.50/M + 10k output × $10/M.
+    expect(result.total_cost_usd).toBeCloseTo(0.153, 8);
+  });
+
+  it('uses gpt-6.1-sol long-context pricing above 272k input tokens', () => {
+    const state = createCodexTranslatorState({ model: 'gpt-6.1-sol', contextWindow: 1_050_000 });
+    const result = translateCodexJsonEvent(
+      {
+        type: 'turn.completed',
+        usage: {
+          input_tokens: 300_000,
+          cached_input_tokens: 100_000,
+          cache_write_input_tokens: 50_000,
+          output_tokens: 20_000,
+          total_tokens: 320_000,
+        },
+      },
+      state,
+    )[0];
+
+    // Above 272k: all input/cache rates × 2 and output × 1.5 for the full request.
+    expect(result.total_cost_usd).toBeCloseTo(1.17, 8);
+  });
+
   it('uses gpt-6-sol long-context pricing only above 272k input tokens', () => {
     const state = createCodexTranslatorState({ model: 'gpt-6-sol', contextWindow: 1_050_000 });
     const result = translateCodexJsonEvent(

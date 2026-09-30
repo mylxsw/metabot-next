@@ -209,6 +209,9 @@ describe('CommandHandler /model', () => {
   it('lists codex models on /model list when engine is codex', async () => {
     const { handler, notices } = buildHandler({ engine: 'codex' });
     await handler.handle(msg('/model list'));
+    expect(notices[0].content).toContain('gpt-6.1-sol');
+    expect(notices[0].content).toContain('$0.10 cached input');
+    expect(notices[0].content).toContain('$2.50 cache write');
     expect(notices[0].content).toContain('gpt-6-astra');
     expect(notices[0].content).toContain('gpt-6-sol');
     expect(notices[0].content).toContain('gpt-5.6');
