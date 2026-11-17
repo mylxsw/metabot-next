@@ -162,6 +162,7 @@ describe('handleCoreChatRoutes', () => {
     expect(events[0].payload.state).toMatchObject({ status: 'running', userPrompt: 'hello' });
     expect(events[2].payload.files[0].transfer).toMatchObject({ mode: 'bridge-private' });
     expect(events[2].payload.files[0].transfer.path).toBeUndefined();
+    expect(events[3].payload.content).toBe('done');
     expect(events[3].payload.result).toMatchObject({ success: true, responseText: 'done' });
   });
 

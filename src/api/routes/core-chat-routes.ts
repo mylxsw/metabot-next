@@ -637,6 +637,7 @@ async function runCoreChatTask(ctx: RouteContext, request: CoreChatRunRequest, e
     await dispatcher.send(result.success ? 'complete' : 'error', {
       messageId: finalMessageId,
       final: true,
+      ...(result.responseText ? { content: result.responseText } : {}),
       state: finalState,
       result: apiTaskResultPayload(result),
       ...(result.error ? { error: result.error } : {}),
